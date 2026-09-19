@@ -56,8 +56,11 @@ The notebook's kernelspec is `julia-1.13`; adjust it to your installed kernel
 name if Jupyter reports a missing kernel.
 
 Step 1 was developed and checked against Julia 1.13.0: `test/runtests.jl`
-passes 258 assertions, and every code cell of `notebooks/block4.ipynb`
-executes cleanly.
+passes 258 assertions, and `notebooks/block4.ipynb` executes end to end
+through the `julia-1.13` IJulia kernel. The committed notebook carries its
+outputs, so the `Z` check is readable without running anything; strip them
+with `jupyter nbconvert --clear-output --inplace notebooks/block4.ipynb` if
+you would rather keep the file clean.
 
 ## Conventions
 
