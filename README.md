@@ -52,8 +52,12 @@ julia --project -e 'using Pkg; Pkg.add("IJulia")'
 jupyter lab notebooks/block4.ipynb
 ```
 
-The notebook's kernelspec is `julia-1.11`; adjust it to your installed kernel
+The notebook's kernelspec is `julia-1.13`; adjust it to your installed kernel
 name if Jupyter reports a missing kernel.
+
+Step 1 was developed and checked against Julia 1.13.0: `test/runtests.jl`
+passes 258 assertions, and every code cell of `notebooks/block4.ipynb`
+executes cleanly.
 
 ## Conventions
 

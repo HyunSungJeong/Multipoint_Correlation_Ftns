@@ -159,7 +159,8 @@ diagonalise the operator `Q` — chosen below to take a distinct value on every
 
 Physically the choice is immaterial for the correlators of Kugler Eq. (39),
 which sum over a complete eigenbasis, but a reproducible basis with resolved
-quantum numbers makes Steps 2-6 debuggable.
+quantum numbers makes Steps 2-6 debuggable. The overall sign of each
+eigenvector is pinned afterwards for the same reason.
 """
 function _canonicalise!(E::Vector{Float64}, V::Matrix{Float64},
                         Q::Matrix{Float64}; atol::Float64=1e-10)
@@ -176,6 +177,20 @@ function _canonicalise!(E::Vector{Float64}, V::Matrix{Float64},
             start = k
         end
     end
+
+    # Fix the remaining freedom, the overall sign of each eigenvector, by
+    # demanding that its first significant component be positive. LAPACK makes
+    # no such promise, so without this the rotated operators of
+    # `to_eigenbasis` can flip sign between platforms or library versions.
+    # The signs cancel in Eq. (28), which closes a cycle over the eigenbasis,
+    # but pinning them keeps intermediate results comparable run to run.
+    for j in axes(V, 2)
+        idx = findfirst(x -> abs(x) > 1e-12, view(V, :, j))
+        if idx !== nothing && V[idx, j] < 0
+            @views V[:, j] .*= -1
+        end
+    end
+
     return E, V
 end
 

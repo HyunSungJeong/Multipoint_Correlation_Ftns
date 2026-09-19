@@ -103,6 +103,14 @@ const PARAMS = [(1.0, 1.0), (2.0, 5.0), (4.0, 0.3), (0.0, 2.0), (8.0, 10.0),
         # weights are monotone in energy: lower energy, larger weight
         @test issorted(sp.ρ, rev = true)
 
+        # eigenvector signs are pinned: first significant component positive
+        for j in 1:DIM
+            col = sp.V[:, j]
+            idx = findfirst(x -> abs(x) > 1e-12, col)
+            @test idx !== nothing
+            @test col[idx] > 0
+        end
+
         # degenerate blocks carry sharp quantum numbers after canonicalisation
         Nvals, Szvals = quantum_numbers(sp, ops)
         @test all(n -> isapprox(n, round(n); atol = 1e-10), Nvals)
