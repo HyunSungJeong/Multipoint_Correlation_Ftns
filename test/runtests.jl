@@ -193,3 +193,5 @@ const PARAMS = [(1.0, 1.0), (2.0, 5.0), (4.0, 0.3), (0.0, 2.0), (8.0, 10.0),
 end
 
 include(joinpath(@__DIR__, "test_psf.jl"))
+include(joinpath(@__DIR__, "test_kernel.jl"))
+include(joinpath(@__DIR__, "test_correlator.jl"))

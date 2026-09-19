@@ -44,6 +44,12 @@ export HubbardAtomModel, Operators, Spectrum,
        eigenenergies_analytic, partition_function_analytic,
        level_position, half_interaction,
        PSFTerm, psf, aggregate_psf, psf_frequencies, psf_total_weight, npoint,
+       MatsubaraFreq, value, fermionic, bosonic, fermionic_freq, bosonic_freq,
+       composites, matsubara_kernel,
+       all_permutations, permutation_sign, correlator,
+       propagator, propagator_exact,
+       vertex_frequencies, spin_operators, correlator_4p,
+       disconnected_4p, connected_4p, vertex, vertex_exact,
        BASIS_LABELS, DIM
 
 """Dimension of the Hubbard-atom Fock space."""
@@ -289,6 +295,8 @@ function partition_function_analytic(m::HubbardAtomModel)
     return 2 + 2 * exp(m.β * half_interaction(m))
 end
 
-include("psf.jl")   # Step 2: partial spectral functions, Eq. (28)
+include("psf.jl")          # Step 2: partial spectral functions, Eq. (28)
+include("kernel.jl")       # Step 3: the Matsubara kernel, Eq. (46)
+include("correlator.jl")   # Steps 4-6: Eq. (39), and the 4p vertex
 
 end # module
