@@ -23,7 +23,7 @@ on the four states `|0⟩, |↑⟩, |↓⟩, |↑↓⟩`.
 | Step | Content | Benchmark | State |
 |:--|:--|:--|:--|
 | **1** | spectrum: operators, diagonalisation, `ρᵢ = e^(-βEᵢ)/Z` | `Z = 2(1 + e^(βu))` by hand | **done** |
-| 2 | partial spectral functions, Eq. (28), general in ℓ | — | not started |
+| **2** | partial spectral functions, Eq. (28), general in ℓ | sum rule `Σ w = ⟨O₁⋯O_ℓ⟩` | **done** |
 | 3 | the kernel, Eq. (46), two-branch form | finite by construction | not started |
 | 4 | ℓ = 2: assemble Eq. (39) | `G(iν) = ½ Σ± (iν ± U/2)⁻¹`, App. E | not started |
 | 5 | ℓ = 4: 24 permutations, Eq. (73), Eq. (76), App. D | Eqs. (85a), (85b) | not started |
@@ -32,9 +32,11 @@ on the four states `|0⟩, |↑⟩, |↓⟩, |↑↓⟩`.
 ## Layout
 
 ```
-src/HubbardAtom.jl    Step 1: operators, spectrum, Boltzmann weights
-test/runtests.jl      verification of Step 1
-notebooks/block4.ipynb  narrated walkthrough; Step 1 filled, Steps 2-6 stubbed
+src/HubbardAtom.jl      module; Step 1: operators, spectrum, Boltzmann weights
+src/psf.jl              Step 2: partial spectral functions, Eq. (28)
+test/runtests.jl        Step 1 checks, and includes test_psf.jl
+test/test_psf.jl        Step 2 checks
+notebooks/block4.ipynb  narrated walkthrough; Steps 1-2 filled, Steps 3-6 stubbed
 ```
 
 ## Running
@@ -56,7 +58,7 @@ The notebook's kernelspec is `julia-1.13`; adjust it to your installed kernel
 name if Jupyter reports a missing kernel.
 
 Step 1 was developed and checked against Julia 1.13.0: `test/runtests.jl`
-passes 258 assertions, and `notebooks/block4.ipynb` executes end to end
+passes 1605 assertions, and `notebooks/block4.ipynb` executes end to end
 through the `julia-1.13` IJulia kernel. The committed notebook carries its
 outputs, so the `Z` check is readable without running anything; strip them
 with `jupyter nbconvert --clear-output --inplace notebooks/block4.ipynb` if
@@ -107,3 +109,22 @@ which is the hand check Step 1 is required to reproduce. The
 `(e^(βu) - 1)/(e^(βu) + 1)` of this same spectrum, so getting `Z` right here is a
 prerequisite for the Step 5 benchmark. At `εd = -U/2` the atom sits at half
 filling, `⟨n↑⟩ = ⟨n↓⟩ = 1/2`, and the double occupancy is `⟨n↑n↓⟩ = 1/Z`.
+
+For Step 2, summing Eq. (28) over every eigenstate cycle collapses the cyclic
+product of matrix elements to a trace,
+
+```
+Σ weights = tr(ρ O_1̄ O_2̄ ⋯ O_ℓ̄) = ⟨O_1̄ O_2̄ ⋯ O_ℓ̄⟩
+```
+
+so the total weight of a PSF is the equal-time expectation value of the operator
+product in the same order. That identity holds for every `ℓ` and is the main
+check on the PSFs. A sharper one is available at `ℓ = 2`: the local spectral
+function `A(ω) = S[d,d†](ω) + S[d†,d](-ω)` comes out as `½δ(ω-u) + ½δ(ω+u)`,
+exactly the two poles of Appendix E's `G(iν) = ½ Σ± (iν ± U/2)⁻¹`, with the
+temperature dependence of the individual PSFs cancelling.
+
+Note that PSFs can vanish identically rather than merely cancel: since `n↑` is a
+projector and `d↑d†↑ = 1 - n↑`, every cyclic arrangement of `(n↑, d↑, d†↑)` has
+`n↑(1 - n↑) = 0`, so `psf` returns no terms at all. Interleaving differently,
+`d↑ n↑ d†↑ = (1 - n↑)² = 1 - n↑`, does not vanish.

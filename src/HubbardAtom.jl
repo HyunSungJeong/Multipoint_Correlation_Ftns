@@ -43,6 +43,7 @@ export HubbardAtomModel, Operators, Spectrum,
        operators, spectrum, to_eigenbasis, thermal_average, quantum_numbers,
        eigenenergies_analytic, partition_function_analytic,
        level_position, half_interaction,
+       PSFTerm, psf, aggregate_psf, psf_frequencies, psf_total_weight, npoint,
        BASIS_LABELS, DIM
 
 """Dimension of the Hubbard-atom Fock space."""
@@ -287,5 +288,7 @@ here is a prerequisite for the Step 5 benchmark.
 function partition_function_analytic(m::HubbardAtomModel)
     return 2 + 2 * exp(m.β * half_interaction(m))
 end
+
+include("psf.jl")   # Step 2: partial spectral functions, Eq. (28)
 
 end # module
