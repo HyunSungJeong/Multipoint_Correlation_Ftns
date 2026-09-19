@@ -125,10 +125,11 @@ projector and `d↑d†↑ = 1 - n↑`, every cyclic arrangement of `(n↑, d↑
 `n↑(1 - n↑) = 0`, so `psf` returns no terms at all. Interleaving differently,
 `d↑ n↑ d†↑ = (1 - n↑)² = 1 - n↑`, does not vanish.
 
-### A correction to Eq. (85)
+### Eq. (85) and the PDF text layer
 
-The published Eq. (85) is hard to read out of the PDF text layer. Transcribed
-from it, the anomalous term of `F↑↓` reads
+**The published Eq. (85) is correct.** What is broken is the PDF *text layer*:
+it renders both products of the anomalous term on one line and loses the
+fraction bar. Extracted literally it reads
 
 ```
 β u² [δ_{ω12} th + δ_{ω13}(th-1) + δ_{ω14}(th+1)] / [∏ᵢ(iωᵢ+u) ∏ᵢ(iωᵢ)]
@@ -136,8 +137,10 @@ from it, the anomalous term of `F↑↓` reads
 
 which cannot be right: `βu²` has dimension of energy, so the remaining factor
 must be dimensionless, while that denominator carries energy⁸ — the expression
-would be energy⁻⁷. The extraction dropped a fraction bar and printed both
-products on one line. The correct factor is `∏ᵢ(iωᵢ+u) / ∏ᵢ(iωᵢ)`:
+would be energy⁻⁷. Building against that form made Step 5 fail *only* in the
+`βδ_ω` terms, while matching to 1e-16 at every generic frequency point.
+
+The printed factor is `∏ᵢ(iωᵢ+u) / ∏ᵢ(iωᵢ)`:
 
 ```
 F↑↓ = 2u + u³ Σᵢ(iωᵢ)²/∏ᵢ(iωᵢ) - 6u⁵/∏ᵢ(iωᵢ)
@@ -146,19 +149,25 @@ F↑↓ = 2u + u³ Σᵢ(iωᵢ)²/∏ᵢ(iωᵢ) - 6u⁵/∏ᵢ(iωᵢ)
 F↑↑ = β u² (δ_{ω14} - δ_{ω12}) ∏ᵢ(iωᵢ+u)/∏ᵢ(iωᵢ)
 ```
 
-Three independent things confirm this form:
+This was first reconstructed from three independent arguments and then
+**confirmed by rendering p. 16 of the PDF to an image and reading the printed
+equation** (`pdftoppm -f 16 -r 400`). The three arguments, none of them
+circular, were:
 
-1. **Dimensions.** Both terms are now energy, as a vertex must be.
+1. **Dimensions.** Both terms come out as energy, as a vertex must.
 2. **Appendix E.** It separately states that expanding the vertex to second
    order gives `F↑↓ = U + ¼βU²(δ_{ω14} - δ_{ω13})` and
    `F↑↑ = ¼βU²(δ_{ω14} - δ_{ω12})`. The corrected form reproduces both, with
    the remainder shrinking as `O(U³)` — checked in `test_correlator.jl`.
 3. **Brute force.** A direct numerical `τ`-integration of Eq. (71), independent
    of the whole Eq. (39)/Eq. (46) machinery, reproduces the computed `G⁽⁴⁾` at
-   the very frequency points where the mangled formula disagreed.
+   the very frequency points where the text-layer form disagreed.
 
 Whenever any `δ` fires the frequencies are `±`-paired, `(ν,-ν,ν',-ν')`, so
 `∏ᵢ(iωᵢ+u) = ∏ᵢ(iωᵢ-u)` and the sign of `u` in that product is not observable.
+
+Eqs. (28), (39), (45), (46), (73), (74) and the Appendix E results were all
+likewise checked against the page images; only Eq. (85) was affected.
 
 `F↑↑` is also checked against crossing symmetry,
 `F↑↑(iω) = F↑↓(iω) - F↑↓(iω′)` with `ω₁ ↔ ω₃` exchanged, independently of the

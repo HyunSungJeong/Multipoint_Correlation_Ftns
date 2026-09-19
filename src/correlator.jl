@@ -254,14 +254,22 @@ The closed-form Hubbard-atom vertex of Eqs. (85a) and (85b), with `u = U/2`,
 `th = tanh(βu/2)` and `i ∈ {1,2,3,4}`:
 
     F↑↓ = 2u + u³ Σᵢ(iωᵢ)² / ∏ᵢ(iωᵢ) - 6u⁵ / ∏ᵢ(iωᵢ)
-          + β u² [δ_{ω₁₂} th + δ_{ω₁₃}(th-1) + δ_{ω₁₄}(th+1)] / [∏ᵢ(iωᵢ+u) ∏ᵢ(iωᵢ)] ,
+          + β u² [δ_{ω₁₂} th + δ_{ω₁₃}(th-1) + δ_{ω₁₄}(th+1)] ∏ᵢ(iωᵢ+u) / ∏ᵢ(iωᵢ) ,
 
-    F↑↑ = β u² (δ_{ω₁₄} - δ_{ω₁₂}) / [∏ᵢ(iωᵢ+u) ∏ᵢ(iωᵢ)] .
+    F↑↑ = β u² (δ_{ω₁₄} - δ_{ω₁₂}) ∏ᵢ(iωᵢ+u) / ∏ᵢ(iωᵢ) .
 
 `σσ′` is `:updn` or `:upup`. The deltas are `δ_{ω,0}` on the composite
-frequencies and are evaluated as exact integer tests. Both denominators are
-safe: `ωᵢ` is fermionic and so never zero, and `iωᵢ + u` cannot vanish for real
-`u` and real nonzero `ωᵢ`.
+frequencies and are evaluated as exact integer tests. `∏ᵢ(iωᵢ)` is safe as a
+denominator, since a fermionic `ωᵢ` is never zero.
+
+The anomalous factor is `∏ᵢ(iωᵢ+u) / ∏ᵢ(iωᵢ)`, as printed in the paper and
+confirmed against the rendered page image. Note that the PDF *text layer* puts
+both products on one line and loses the fraction bar; taken literally that
+reads `1/[∏ᵢ(iωᵢ+u)∏ᵢ(iωᵢ)]`, which is dimensionally energy⁻⁷ rather than
+energy and disagrees numerically in exactly the `βδ_ω` terms.
+
+Whenever a delta fires the frequencies are ±-paired, `(ν,-ν,ν',-ν')`, so
+`∏ᵢ(iωᵢ+u) = ∏ᵢ(iωᵢ-u)` and the sign of `u` there is not observable.
 """
 function vertex_exact(m::HubbardAtomModel, σσ′::Symbol, ms::AbstractVector{MatsubaraFreq})
     u, β = half_interaction(m), m.β
