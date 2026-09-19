@@ -36,6 +36,9 @@ its outputs, so the numbers are readable on GitHub without running anything.
 Strip them with `jupyter nbconvert --clear-output --inplace notebooks/block4.ipynb`
 if you prefer a clean file.
 
+`notebooks/block4.pdf` is the executed notebook rendered to PDF (10 pages), for
+reading or printing without a Julia kernel.
+
 ## Layout
 
 ```
@@ -48,6 +51,7 @@ test/test_psf.jl        Step 2 checks
 test/test_kernel.jl     Step 3 checks
 test/test_correlator.jl Steps 4-6 checks
 notebooks/block4.ipynb  narrated walkthrough of all six steps
+notebooks/block4.pdf    the executed notebook, rendered to PDF
 ```
 
 ## Conventions and design decisions
