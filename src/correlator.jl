@@ -54,6 +54,46 @@ function permutation_sign(p::AbstractVector{<:Integer}, is_fermionic::AbstractVe
 end
 
 """
+    PermutedPSF
+
+One summand of the permutation sum of Eq. (39), (64) or (67a): the permutation
+`p`, its sign `ζ`, and the PSF terms of `O_p`. The PSFs are formalism
+independent, so one cache of these serves the Matsubara and Keldysh kernels.
+"""
+struct PermutedPSF
+    p::Vector{Int}
+    ζ::Int
+    terms::Vector{PSFTerm}
+end
+
+"""
+    permuted_psfs(sp, Os; is_fermionic, part = :full) -> Vector{PermutedPSF}
+
+For every permutation `p` of the `ℓ` operators: `ζ_p`, and the PSF of the
+permuted tuple `O_p` restricted to `part` (see [`psf_part`](@ref)). Computing
+this once and reusing it across frequencies, Keldysh components and `γ₀` is what
+keeps the Keldysh scans cheap.
+"""
+function permuted_psfs(sp::Spectrum, Os::Tuple;
+                       is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
+                       part::Symbol = :full)
+    ℓ = length(Os)
+    ℓ ≥ 2 || throw(ArgumentError("need at least ℓ = 2 operators, got $ℓ"))
+    length(is_fermionic) == ℓ ||
+        throw(DimensionMismatch("is_fermionic must have one entry per operator"))
+    part === :full || ℓ == 4 ||
+        throw(ArgumentError("part = :$part needs Eq. (31), which is for ℓ = 4"))
+    out = PermutedPSF[]
+    for p in all_permutations(ℓ)
+        ζ = permutation_sign(p, is_fermionic)
+        Op = ntuple(i -> Os[p[i]], ℓ)
+        push!(out, PermutedPSF(p, ζ,
+              psf_part(sp, Op; part = part, is_fermionic = is_fermionic[p])))
+    end
+    return out
+end
+
+"""
     correlator(m::HubbardAtomModel, Os, ms; kwargs...) -> ComplexF64
 
 The Matsubara `ℓ`p correlator `G(iω)` of Kugler Eq. (39), for the operator
@@ -68,6 +108,13 @@ consumes.
 
 Keywords:
 
+  - `kernel` — `:full` (default) uses Eq. (46), anomalous terms included.
+    `:regular` uses the bare product `∏ᵢ [iω_{1̄⋯ī} - ω'_{1̄⋯ī}]⁻¹` of Eq. (42),
+    giving the object `G̃` of Eq. (68b) — the one Eq. (69) continues to the
+    Keldysh formalism. The two differ only where some composite vanishes; there
+    the regular kernel is singular and this throws rather than return Inf.
+  - `part` — `:full`, `:connected` or `:disconnected`, splitting the PSF by
+    Eq. (31) before the kernel is applied (ℓ = 4 only).
   - `is_fermionic` — which operators are fermionic, for `ζ_p`. Defaults to all.
   - `sp` — a precomputed [`Spectrum`](@ref); pass one to avoid rediagonalising
     when sweeping frequencies.
@@ -75,7 +122,9 @@ Keywords:
 """
 function correlator(m::HubbardAtomModel, Os::Tuple, ms::AbstractVector{MatsubaraFreq};
                     is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
-                    sp::Spectrum = spectrum(m), atol::Real = 1e-10)
+                    sp::Spectrum = spectrum(m), atol::Real = 1e-10,
+                    kernel::Symbol = :full, part::Symbol = :full,
+                    cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
     ℓ = length(Os)
     ℓ ≥ 2 || throw(ArgumentError("need at least ℓ = 2 operators, got $ℓ"))
     length(ms) == ℓ ||
@@ -85,15 +134,61 @@ function correlator(m::HubbardAtomModel, Os::Tuple, ms::AbstractVector{Matsubara
     sum(f -> f.m, ms) == 0 ||
         throw(ArgumentError("external frequencies must conserve energy, Σω = 0; " *
                             "got Σm = $(sum(f -> f.m, ms))"))
+    kernel in (:full, :regular) ||
+        throw(ArgumentError("kernel must be :full or :regular, got $kernel"))
+
+    data = cache === nothing ?
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
 
     total = zero(ComplexF64)
-    for p in all_permutations(ℓ)
-        ζ = permutation_sign(p, is_fermionic)
-        Op = ntuple(i -> Os[p[i]], ℓ)
-        msp = [ms[p[i]] for i in 1:ℓ]
-        for t in psf(sp, Op)
+    for d in data
+        msp = [ms[d.p[i]] for i in 1:ℓ]
+        for t in d.terms
             Ω, vanishing = composites(msp, t.position, m.β; atol = atol)
-            total += ζ * matsubara_kernel(Ω, vanishing, m.β) * t.weight
+            if kernel === :regular
+                any(vanishing) && throw(DomainError(msp,
+                    "the regular kernel of Eq. (42) is singular here: a composite " *
+                    "Ω vanishes. Use kernel = :full, or continue off the axis."))
+                total += d.ζ * prod(inv, Ω) * t.weight
+            else
+                total += d.ζ * matsubara_kernel(Ω, vanishing, m.β) * t.weight
+            end
+        end
+    end
+    return total
+end
+
+"""
+    regular_sum(sp, Os, z; is_fermionic, part = :full, cache) -> ComplexF64
+
+The regular spectral sum of Eqs. (42)/(68b),
+
+    Σ_p ζ_p ∫ d^{ℓ-1}ω'_p S[O_p](ω'_p) / ∏_{i=1}^{ℓ-1} [z_{1̄⋯ī} - ω'_{1̄⋯ī}] ,
+
+evaluated at an **arbitrary** complex tuple `z` standing in for `iω`. With
+`z = iω` on the Matsubara axis it is `G̃(iω)`; with `z = ω^[η]` it is the right
+side of Eq. (69), i.e. `2^{ℓ/2-1} G^[η](ω)`. This is how the Keldysh code is
+checked against the Matsubara one: same PSFs, same permutation loop, but
+evaluated off the imaginary axis, where the regular kernel is never singular.
+"""
+function regular_sum(sp::Spectrum, Os::Tuple, z::AbstractVector{<:Number};
+                     is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
+                     part::Symbol = :full,
+                     cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+    ℓ = length(Os)
+    length(z) == ℓ || throw(DimensionMismatch("got $(length(z)) frequencies for $ℓ operators"))
+    data = cache === nothing ?
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+    total = zero(ComplexF64)
+    for d in data
+        for t in d.terms
+            acc = zero(ComplexF64)
+            K = one(ComplexF64)
+            for i in 1:(ℓ - 1)
+                acc += z[d.p[i]]
+                K /= (acc - t.position[i])
+            end
+            total += d.ζ * K * t.weight
         end
     end
     return total

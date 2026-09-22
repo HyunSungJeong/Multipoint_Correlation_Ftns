@@ -50,6 +50,10 @@ export HubbardAtomModel, Operators, Spectrum,
        propagator, propagator_exact,
        vertex_frequencies, spin_operators, correlator_4p,
        disconnected_4p, connected_4p, vertex, vertex_exact,
+       psf_disconnected, psf_part, PermutedPSF, permuted_psfs, regular_sum,
+       omega_eta, keldysh_slots, keldysh_digits, keldysh_label, all_keldysh_components,
+       permuted_keldysh, retarded_kernel, keldysh_kernel, keldysh_kernel_eq63,
+       keldysh_correlator, keldysh_components,
        BASIS_LABELS, DIM
 
 """Dimension of the Hubbard-atom Fock space."""
@@ -298,5 +302,6 @@ end
 include("psf.jl")          # Step 2: partial spectral functions, Eq. (28)
 include("kernel.jl")       # Step 3: the Matsubara kernel, Eq. (46)
 include("correlator.jl")   # Steps 4-6: Eq. (39), and the 4p vertex
+include("keldysh.jl")      # Keldysh formalism: Eqs. (49), (52), (63), (67)
 
 end # module

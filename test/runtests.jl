@@ -195,3 +195,4 @@ end
 include(joinpath(@__DIR__, "test_psf.jl"))
 include(joinpath(@__DIR__, "test_kernel.jl"))
 include(joinpath(@__DIR__, "test_correlator.jl"))
+include(joinpath(@__DIR__, "test_keldysh.jl"))

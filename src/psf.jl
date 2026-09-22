@@ -167,3 +167,74 @@ operator product, in the same order. This is the sum rule Step 2 is checked
 against, and it is independent of `ℓ`.
 """
 psf_total_weight(terms::Vector{PSFTerm}) = sum(t -> t.weight, terms; init = zero(ComplexF64))
+
+# ---------------------------------------------------------------------------
+# Disconnected part of a 4p PSF, Kugler Eq. (31)
+# ---------------------------------------------------------------------------
+
+"""
+    psf_disconnected(sp::Spectrum, Os; is_fermionic = (true,true,true,true)) -> Vector{PSFTerm}
+
+The disconnected part of a 4p PSF, Kugler Eq. (31), for the operator tuple
+`Os = (O_1̄, O_2̄, O_3̄, O_4̄)` in the permuted order:
+
+    S^dis[O_p](ω'_p) = S[O_1̄,O_2̄](ω'_1̄,ω'_2̄) S[O_3̄,O_4̄](ω'_3̄,ω'_4̄) δ(ω'_1̄2̄)
+                     + ζ S[O_1̄,O_3̄](ω'_1̄,ω'_3̄) S[O_2̄,O_4̄](ω'_2̄,ω'_4̄) δ(ω'_1̄3̄)
+                     +   S[O_1̄,O_4̄](ω'_1̄,ω'_4̄) S[O_2̄,O_3̄](ω'_2̄,ω'_3̄) δ(ω'_1̄4̄) .
+
+Each factor is a 2p PSF from [`psf`](@ref); the explicit delta fixes the pair's
+frequencies to sum to zero. Written in the partial sums `ω'_{1̄⋯ī}` that
+[`PSFTerm`](@ref) stores, with `a` the position of the first factor and `b` (or
+`c`) that of the second, the three pairings sit at
+
+    (1̄2̄)(3̄4̄):  (a, 0,   c)
+    (1̄3̄)(2̄4̄):  (a, a+b, b)
+    (1̄4̄)(2̄3̄):  (a, a+b, a) .
+
+`ζ` is the sign of the transposition `O_2̄ ↔ O_3̄` that brings the middle pairing
+into adjacent form: `-1` when both are fermionic.
+
+The point of doing the split here rather than on correlators is that Eq. (31)
+contains no kernel, so it is **formalism independent**: `S^con = S - S^dis`
+feeds the Matsubara kernel of Eq. (46) and the Keldysh kernel of Eq. (67b)
+alike. For free fermions Wick's theorem makes `S^con` vanish identically.
+"""
+function psf_disconnected(sp::Spectrum, Os::Tuple;
+                          is_fermionic::Union{Tuple,AbstractVector} = (true, true, true, true))
+    length(Os) == 4 || throw(ArgumentError("Eq. (31) is for ℓ = 4, got ℓ = $(length(Os))"))
+    A, B, C, D = Os
+    ζ = (is_fermionic[2] && is_fermionic[3]) ? -1 : 1
+    out = PSFTerm[]
+    for x in psf(sp, A, B), y in psf(sp, C, D)                    # (1̄2̄)(3̄4̄)
+        a, c = x.position[1], y.position[1]
+        push!(out, PSFTerm([a, 0.0, c], x.weight * y.weight, Int[]))
+    end
+    for x in psf(sp, A, C), y in psf(sp, B, D)                    # (1̄3̄)(2̄4̄)
+        a, b = x.position[1], y.position[1]
+        push!(out, PSFTerm([a, a + b, b], ζ * x.weight * y.weight, Int[]))
+    end
+    for x in psf(sp, A, D), y in psf(sp, B, C)                    # (1̄4̄)(2̄3̄)
+        a, b = x.position[1], y.position[1]
+        push!(out, PSFTerm([a, a + b, a], x.weight * y.weight, Int[]))
+    end
+    return out
+end
+
+"""
+    psf_part(sp, Os; part = :full, is_fermionic) -> Vector{PSFTerm}
+
+The PSF of `Os` restricted to one part: `:full` is Eq. (28), `:disconnected` is
+Eq. (31), and `:connected` is `S - S^dis`, represented by appending the
+disconnected terms with their weights negated. Linearity of every kernel in the
+PSF makes that representation exact.
+"""
+function psf_part(sp::Spectrum, Os::Tuple; part::Symbol = :full,
+                  is_fermionic::Union{Tuple,AbstractVector} = fill(true, length(Os)))
+    part === :full && return psf(sp, Os)
+    part === :disconnected && return psf_disconnected(sp, Os; is_fermionic = is_fermionic)
+    if part === :connected
+        dis = psf_disconnected(sp, Os; is_fermionic = is_fermionic)
+        return vcat(psf(sp, Os), [PSFTerm(t.position, -t.weight, t.states) for t in dis])
+    end
+    throw(ArgumentError("part must be :full, :connected or :disconnected, got $part"))
+end
