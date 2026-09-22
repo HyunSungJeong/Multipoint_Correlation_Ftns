@@ -30,13 +30,13 @@ on the four states `|0⟩, |↑⟩, |↓⟩, |↑↓⟩`.
 | **6** | null test at `U = 0` | every connected object vanishes | ≤ 2e-15 |
 
 `julia --project test/runtests.jl` runs **46,279 assertions**, all passing, on
-Julia 1.13.0. `notebooks/block4.ipynb` executes end to end through the
+Julia 1.13.0. `notebooks/hubbard_atom_spectral_representation.ipynb` executes end to end through the
 `julia-1.13` IJulia kernel — 21 code cells, no errors — and is committed with
 its outputs, so the numbers are readable on GitHub without running anything.
-Strip them with `jupyter nbconvert --clear-output --inplace notebooks/block4.ipynb`
+Strip them with `jupyter nbconvert --clear-output --inplace notebooks/hubbard_atom_spectral_representation.ipynb`
 if you prefer a clean file.
 
-`notebooks/block4.pdf` is the executed notebook rendered to PDF (10 pages), for
+`notebooks/hubbard_atom_spectral_representation.pdf` is the executed notebook rendered to PDF (10 pages), for
 reading or printing without a Julia kernel.
 
 ## Layout
@@ -50,8 +50,10 @@ test/runtests.jl        Step 1 checks; includes the other test files
 test/test_psf.jl        Step 2 checks
 test/test_kernel.jl     Step 3 checks
 test/test_correlator.jl Steps 4-6 checks
-notebooks/block4.ipynb  narrated walkthrough of all six steps
-notebooks/block4.pdf    the executed notebook, rendered to PDF
+notebooks/hubbard_atom_spectral_representation.ipynb
+                        narrated walkthrough of all six steps
+notebooks/hubbard_atom_spectral_representation.pdf
+                        the executed notebook, rendered to PDF
 ```
 
 ## Conventions and design decisions
@@ -187,7 +189,7 @@ Notebook — needs [IJulia](https://github.com/JuliaLang/IJulia.jl):
 
 ```
 julia --project -e 'using Pkg; Pkg.add("IJulia")'
-jupyter lab notebooks/block4.ipynb
+jupyter lab notebooks/hubbard_atom_spectral_representation.ipynb
 ```
 
 The kernelspec is `julia-1.13`; adjust it if your installed kernel is named
