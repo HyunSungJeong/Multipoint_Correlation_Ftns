@@ -1,16 +1,24 @@
 name = "HubbardAtom"
 uuid = "3f1a6d2e-9c7b-4e85-9a31-5d0c8f4b2a67"
-authors = ["HyunSungJeong <169745197+HyunSungJeong@users.noreply.github.com>"]
 version = "0.1.0"
+authors = ["HyunSungJeong <169745197+HyunSungJeong@users.noreply.github.com>"]
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+BenchmarkTools = "1.8.0"
+CairoMakie = "0.15.14"
+JLD2 = "0.6.7"
+StaticArrays = "1.9.22"
+julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[compat]
-julia = "1.6"

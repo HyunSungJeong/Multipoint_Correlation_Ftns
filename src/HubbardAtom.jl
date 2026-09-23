@@ -38,6 +38,7 @@ hand.
 module HubbardAtom
 
 using LinearAlgebra
+using StaticArrays
 
 export AbstractModel, HubbardAtomModel, Operators, Spectrum,
        operators, spectrum, to_eigenbasis, thermal_average, quantum_numbers,
@@ -62,6 +63,11 @@ export AbstractModel, HubbardAtomModel, Operators, Spectrum,
        momentum_allowed, all_momentum_tuples, dimer_operators_4p, dimer_psf_cache,
        dimer_correlator_4p, dimer_disconnected_4p, dimer_connected_4p, dimer_vertex,
        dimer_keldysh_4p, dimer_delta_part,
+       TOL_DEG, TOL_WEIGHT, PSF4, PSF2, KFPerm, merge_peaks, psf4_tables, psf2_tables,
+       keldysh_coefficients, HeatmapParams, MFTables, KFTables, heatmap_tables,
+       mf_correlator_point, mf_leg, kf_correlator_point!, leg, amputate!, ph_frequencies,
+       vertex_point!, vertex_grid, kf_correlator_grid, bare_vertex_kf, bare_vertex_mf,
+       fret_updn, symlog,
        BASIS_LABELS, DIM
 
 """
@@ -330,5 +336,6 @@ include("kernel.jl")       # Step 3: the Matsubara kernel, Eq. (46)
 include("correlator.jl")   # Steps 4-6: Eq. (39), and the 4p vertex
 include("keldysh.jl")      # Keldysh formalism: Eqs. (49), (52), (63), (67)
 include("dimer.jl")        # the two-site Hubbard model, 16 states
+include("heatmap.jl")      # vertex heat maps: grids, PSF-level subtraction, KF amputation
 
 end # module

@@ -4,3 +4,6 @@ Manifest.toml
 *.jl.*.cov
 *.jl.mem
 /docs/build/
+# 82 MB: all 16 Keldysh components of the 401x401 KF vertex, both spins.
+# Regenerated in seconds by the heat-map section of the atom notebook.
+notebooks/figures/heatmaps/p2_kf_vertex_full.jld2
