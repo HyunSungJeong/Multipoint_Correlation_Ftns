@@ -67,16 +67,17 @@ struct PermutedPSF
 end
 
 """
-    permuted_psfs(sp, Os; is_fermionic, part = :full) -> Vector{PermutedPSF}
+    permuted_psfs(sp, Os; is_fermionic, part = :full, otol = 0.0) -> Vector{PermutedPSF}
 
 For every permutation `p` of the `ℓ` operators: `ζ_p`, and the PSF of the
-permuted tuple `O_p` restricted to `part` (see [`psf_part`](@ref)). Computing
+permuted tuple `O_p` restricted to `part` (see [`psf_part`](@ref)); `otol` is
+the matrix-element tolerance of [`psf`](@ref). Computing
 this once and reusing it across frequencies, Keldysh components and `γ₀` is what
 keeps the Keldysh scans cheap.
 """
 function permuted_psfs(sp::Spectrum, Os::Tuple;
                        is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
-                       part::Symbol = :full)
+                       part::Symbol = :full, otol::Real = 0.0)
     ℓ = length(Os)
     ℓ ≥ 2 || throw(ArgumentError("need at least ℓ = 2 operators, got $ℓ"))
     length(is_fermionic) == ℓ ||
@@ -88,13 +89,13 @@ function permuted_psfs(sp::Spectrum, Os::Tuple;
         ζ = permutation_sign(p, is_fermionic)
         Op = ntuple(i -> Os[p[i]], ℓ)
         push!(out, PermutedPSF(p, ζ,
-              psf_part(sp, Op; part = part, is_fermionic = is_fermionic[p])))
+              psf_part(sp, Op; part = part, is_fermionic = is_fermionic[p], otol = otol)))
     end
     return out
 end
 
 """
-    correlator(m::HubbardAtomModel, Os, ms; kwargs...) -> ComplexF64
+    correlator(m::AbstractModel, Os, ms; kwargs...) -> ComplexF64
 
 The Matsubara `ℓ`p correlator `G(iω)` of Kugler Eq. (39), for the operator
 tuple `Os` in its **unpermuted** order and external frequencies `ms`, a vector
@@ -120,7 +121,7 @@ Keywords:
     when sweeping frequencies.
   - `atol` — tolerance on the spectral part of a vanishing composite.
 """
-function correlator(m::HubbardAtomModel, Os::Tuple, ms::AbstractVector{MatsubaraFreq};
+function correlator(m::AbstractModel, Os::Tuple, ms::AbstractVector{MatsubaraFreq};
                     is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                     sp::Spectrum = spectrum(m), atol::Real = 1e-10,
                     kernel::Symbol = :full, part::Symbol = :full,
@@ -187,6 +188,57 @@ function regular_sum(sp::Spectrum, Os::Tuple, z::AbstractVector{<:Number};
             for i in 1:(ℓ - 1)
                 acc += z[d.p[i]]
                 K /= (acc - t.position[i])
+            end
+            total += d.ζ * K * t.weight
+        end
+    end
+    return total
+end
+
+"""
+    anomalous_part(m, Os, ms; channel, is_fermionic, sp, atol, part, cache) -> ComplexF64
+
+The anomalous second term of Kugler Eq. (45),
+
+    -β/2 Σ_p ζ_p Σ_terms δ_{Ω_{1̄⋯j̄},0} ∏_{i≠j} Ω⁻¹_{1̄⋯ī} · weight ,
+
+restricted to vanishing composites that belong to one frequency **channel**: the
+slot set `{1̄,…,j̄}` of the vanishing composite must equal `channel` or its
+complement. For a fermionic 4p function, `channel = [1,2]` collects every term
+that sits on `ω₁₂ = 0` (the composite `ω_{1̄2̄}` with `{1̄,2̄} = {1,2}` or
+`{3,4}`), and likewise `[1,3]`, `[1,4]`.
+
+Eq. (45) splits the kernel into a regular product, whose divergences cancel
+between cyclically related permutations, and this term, which is what is left
+at `Ω = 0` and carries the explicit `β`. So it is *the* δ-function contribution
+of a channel — for the Hubbard atom, the `βu²δ_ω` terms of Eq. (85) — defined
+by the paper's own kernel rather than by fitting. Eq. (46) redistributes the
+regular limit into its `Σ_{i≠j} Ω⁻¹` bracket; only the `β` survives here.
+"""
+function anomalous_part(m::AbstractModel, Os::Tuple, ms::AbstractVector{MatsubaraFreq};
+                        channel::AbstractVector{<:Integer},
+                        is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
+                        sp::Spectrum = spectrum(m), atol::Real = 1e-10,
+                        part::Symbol = :full,
+                        cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+    ℓ = length(Os)
+    sum(f -> f.m, ms) == 0 || throw(ArgumentError("external frequencies must conserve energy"))
+    ch = Set(channel)
+    chc = setdiff(Set(1:ℓ), ch)
+    data = cache === nothing ?
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+    total = zero(ComplexF64)
+    for d in data
+        msp = [ms[d.p[i]] for i in 1:ℓ]
+        for t in d.terms
+            Ω, vanishing = composites(msp, t.position, m.β; atol = atol)
+            j = findfirst(vanishing)
+            j === nothing && continue
+            slots = Set(d.p[1:j])
+            (slots == ch || slots == chc) || continue
+            K = -m.β / 2
+            for (i, Ωi) in enumerate(Ω)
+                i == j || (K /= Ωi)
             end
             total += d.ζ * K * t.weight
         end

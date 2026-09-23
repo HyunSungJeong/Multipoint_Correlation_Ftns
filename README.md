@@ -6,10 +6,12 @@ Numerical companion to
 > *Multipoint Correlation Functions: Spectral Representation and Numerical Evaluation*,
 > [Phys. Rev. X **11**, 041006 (2021)](https://doi.org/10.1103/PhysRevX.11.041006)
 
-Matsubara and Keldysh correlators of the half-filled Hubbard atom, assembled
-directly from their spectral representation and checked against every closed
-form the paper quotes. The partial spectral functions are computed once and
-shared by both formalisms; only the kernel changes.
+Matsubara and Keldysh correlators of the half-filled Hubbard atom and the
+two-site Hubbard model (dimer), assembled directly from their spectral
+representation and checked against every closed form available. The partial
+spectral functions are computed once and shared by both formalisms; only the
+kernel changes. The same code serves both models: everything downstream of
+`spectrum(m)` accepts any `AbstractModel`.
 
 Model — the `U/Δ → ∞` limit of the symmetric AIM, Eq. (79):
 
@@ -48,7 +50,28 @@ explicit argument everywhere, and nothing is broadened or put on a grid.
 | **V5** | null test at `U = 0` | `S^con ≡ 0`; `G^con,k` for all 16 `k` | ≤ 7e-12 |
 | **V6** | `δ`-like components against Eq. (85) | `U`-scaling exponents 3, 2, 2 (↑↓) and 2, 2 (↑↑); App. E `(n,n)` | 3.008, 1.953, 2.061, 2.010, 2.010 |
 
-`julia --project test/runtests.jl` runs **52,067 assertions**, all passing, on
+## Status — Hubbard dimer complete
+
+`notebooks/hubbard_dimer.ipynb` (PDF alongside). Two sites, 16 states, operators
+from global Jordan–Wigner strings in mode order `1↑, 1↓, 2↑, 2↓`, momentum
+`k ∈ {0, π}` carried as an integer. The closed forms (spectrum, `Z`, `G_k`) are
+the task sheet's own; they are checked here against exact diagonalisation.
+
+| Check | Content | Result |
+|:--|:--|:--|
+| **D1** | spectrum, degeneracies, `Z`; shifted weights at `β = 1000` | ≤ 5e-15 |
+| **D2** | `G_k(iν)` from ℓ = 2 PSFs vs closed form, 3 parameter sets; U = 0, t = 0, T → 0 limits | ≤ 4e-15 |
+| **D3** | `G₁₁ = ½(G₀+G_π)`, `G₁₂ = ½(G₀-G_π)` from site operators; `G₁₁` purely imaginary | ≤ 1e-15 |
+| **D4** | Keldysh ℓ = 2: `G^R`, `G^A` vs continued closed form; FDT (C4) at all 8 poles | ≤ 1e-13 rel.; `O(γ₀²)` |
+| **D5** | momentum selection rule, 8 forbidden tuples | exactly 0 (≤ 8e-16 unfiltered) |
+| **D6** | U = 0: `G^con`, `F` for 16 tuples × 2 spins | ≤ 3e-14 |
+| **D7** | `F↑↓/U → ½ δ_{k₁-k₂+k₃-k₄}`, `F↑↑/U → 0` (Richardson from U = 1e-2, 5e-3) | ≤ 6e-6 |
+| **D8** | t → 0: `F → ½ F^atom δ`; anomalous vs regular branch of Eq. (46) | exact at t = 0; ∝ t² |
+| **D9** | crossing, both `ω₁↔ω₃` and `ω₂↔ω₄` forms | ≤ 5e-14 |
+| **D10** | Keldysh: selection rule, U = 0, Eq. (69) for all fully retarded components | exact / ≤ 5e-14 / exact |
+| **D11** | size of the `δ_{ω₁₂}` term vs `β(c-U/2)` | free-moment value for x ≪ 1; `∝ β e^{-β(c-U/2)}` for x ≫ 1 |
+
+`julia --project test/runtests.jl` runs **56,068 assertions**, all passing, on
 Julia 1.13.0. `notebooks/hubbard_atom_spectral_representation.ipynb` executes end to end through the
 `julia-1.13` IJulia kernel — 30 code cells, no errors, about 25 s — and is committed with
 its outputs, so the numbers are readable on GitHub without running anything.
@@ -56,26 +79,32 @@ Strip them with `jupyter nbconvert --clear-output --inplace notebooks/hubbard_at
 if you prefer a clean file.
 
 `notebooks/hubbard_atom_spectral_representation.pdf` is the executed notebook rendered to PDF (20 pages), for
-reading or printing without a Julia kernel.
+reading or printing without a Julia kernel. `notebooks/hubbard_dimer.ipynb`
+(about a minute, 18 code cells) and `notebooks/hubbard_dimer.pdf` (20 pages) do
+the same for the dimer.
 
 ## Layout
 
 ```
-src/HubbardAtom.jl      module; Step 1: operators, spectrum, Boltzmann weights
+src/HubbardAtom.jl      module; AbstractModel; Step 1: operators, spectrum, Boltzmann weights
 src/psf.jl              Step 2: partial spectral functions, Eq. (28)
 src/kernel.jl           Step 3: the Matsubara kernel, Eq. (46)
 src/correlator.jl       Steps 4-6: Eq. (39), the propagator, the 4p vertex;
                         regular-kernel flag and G̃ of Eq. (68b) for V3
 src/keldysh.jl          Keldysh: Eqs. (49), (52), (63), (67a,b)
+src/dimer.jl            the two-site model: operators, closed forms, k-basis vertex
 test/runtests.jl        Step 1 checks; includes the other test files
 test/test_psf.jl        Step 2 checks
 test/test_kernel.jl     Step 3 checks
 test/test_correlator.jl Steps 4-6 checks
 test/test_keldysh.jl    K1-K3 and V1-V6
+test/test_dimer.jl      D1-D11, traps 1-3
 notebooks/hubbard_atom_spectral_representation.ipynb
                         narrated walkthrough: six Matsubara steps, then Keldysh
 notebooks/hubbard_atom_spectral_representation.pdf
                         the executed notebook, rendered to PDF
+notebooks/hubbard_dimer.ipynb, notebooks/hubbard_dimer.pdf
+                        the dimer task, D1-D11
 ```
 
 ## Conventions and design decisions
@@ -162,6 +191,46 @@ conditioning-aware.
 **V5 has no teeth for K2.** At `U = 0`, `S^con ≡ 0`, so every kernel, correct or
 not, gives `G^con = 0`. Even the full `G` of the trap kernel vanishes at a
 generic point. V5 is a check on the PSF split of Eq. (31), not on the kernel.
+
+## Dimer: notes and findings
+
+**Momentum-basis amputation.** In the site basis the legs are 2×2 matrices, so
+the scalar division of Eq. (74) is wrong for `t ≠ 0` (5–14% off at
+`t = 0.7`); it is done leg by leg in the `k` basis, where `G` is diagonal, and
+site components follow by transforming the four legs of `F`. Eq. (73) gets a
+momentum Kronecker delta per Wick pairing and is cross-checked against the
+kernel-free PSF split of Eq. (31).
+
+**Matrix-element filter (`otol`).** `H` is not diagonal in the Fock basis, so
+symmetry-forbidden matrix elements come out of the eigenbasis rotation as
+roundoff (`~1e-17`), not zeros. Unfiltered, 99.9% of the `1.6×10⁶` cycles of a
+4p PSF survive with weights `~1e-33` (397,408 terms instead of 272).
+`psf(...; otol)` zeroes rotated elements below `otol` first; `DimerContext`
+uses `1e-12`, and `otol = 0` reproduces the unfiltered sum (identical results
+for allowed tuples; forbidden ones at 1e-16 instead of exactly 0). The atom's
+default is `0`, so its results are unchanged.
+
+**D8, both branches of Eq. (46).** Site exchange `P` is conserved and the
+bonding/antibonding levels have opposite `P`, so which terms switch branch at
+`t = 0` depends on the tuple: for `0101` all 384 δ-carrying terms are anomalous
+at `t = 0` and none are at `t ≠ 0`, the contribution moving to the regular
+branch through `±2t` denominators. The deviation from `½F^atom` is a clean `t²`
+law for `10⁻³ ≤ t ≤ 10⁻¹`. Below `t ≈ 3×10⁻⁴` roundoff growing as `1/t²` takes
+over in `0101` (1e-7 at `t = 1e-4`, 1e-5 at `t = 1e-5`); at `t = 1e-5` the
+singlet–triplet gap `4t²/U ≈ 2e-10` also lets LAPACK mix those eigenvectors.
+
+**D11, the δ(ω₁₂) term.** Defined without fitting as the anomalous term of
+Eq. (45) (`anomalous_part`), restricted to one frequency channel, on the
+connected PSF, amputated. On the atom it reproduces the three `βu²δ_ω` terms
+of Eq. (85a) channel by channel. For the dimer, relative to the free-moment
+value it is `≈ 1` for `β(c-U/2) ≪ 1`, crosses over at `β(c-U/2) ≈ 1`, and
+beyond that `|D₁₂| ≈ C β e^{-β(c-U/2)}`: the local decay rate is 0.95 of the
+singlet–triplet gap at `x ≈ 20`, with the shortfall × β ≈ 1 for all three `t`.
+The task sheet's expectation holds; the rate is the triplet's Boltzmann weight.
+
+**Trap 3.** At `t = U/2` the triplet meets `-U/2 - t` and the anomalous branch
+fires unexpectedly; with the explicit tolerance the vertex is continuous there
+(`|F(1) - F(1±10⁻⁶)| ≤ 6e-13`).
 
 ## Closed forms used as checks
 

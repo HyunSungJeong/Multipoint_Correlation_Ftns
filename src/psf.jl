@@ -59,15 +59,27 @@ Combining Eqs. (26)–(28) gives Eq. (29), whose numerator
 `wtol` drops terms whose weight has modulus `≤ wtol`; the default `0.0` keeps
 everything except exact zeros, so no contribution is silently discarded — at
 large `βU` legitimate weights can be as small as `e^{-βU}`.
+
+`otol` instead zeroes rotated matrix elements `|(O)_{ab}| ≤ otol` before any
+product is formed. A matrix element between eigenstates is either forbidden by
+a symmetry — and then only roundoff, `~1e-17`, survives the rotation — or of
+order one, so a threshold like `1e-12` removes exactly the former. It matters
+once `H` is not diagonal in the Fock basis: for the 16-state dimer, roundoff
+elements make 99.9% of the `1.6×10⁶` cycles "nonzero" with weights `~1e-33`.
+The default `0.0` changes nothing.
 """
-function psf(sp::Spectrum, Os::Tuple; wtol::Real = 0.0)
+function psf(sp::Spectrum, Os::Tuple; wtol::Real = 0.0, otol::Real = 0.0)
     ℓ = length(Os)
     ℓ ≥ 2 || throw(ArgumentError("Eq. (28) needs at least ℓ = 2 operators, got $ℓ"))
     n = length(sp.E)
     all(O -> size(O) == (n, n), Os) ||
         throw(DimensionMismatch("every operator must be $n×$n to match the spectrum"))
 
-    Orot = map(O -> ComplexF64.(to_eigenbasis(sp, O)), Os)
+    Orot = map(Os) do O
+        R = ComplexF64.(to_eigenbasis(sp, O))
+        otol > 0 && (R[abs.(R) .<= otol] .= 0)
+        R
+    end
     E = sp.E
     terms = PSFTerm[]
 
@@ -200,20 +212,21 @@ feeds the Matsubara kernel of Eq. (46) and the Keldysh kernel of Eq. (67b)
 alike. For free fermions Wick's theorem makes `S^con` vanish identically.
 """
 function psf_disconnected(sp::Spectrum, Os::Tuple;
-                          is_fermionic::Union{Tuple,AbstractVector} = (true, true, true, true))
+                          is_fermionic::Union{Tuple,AbstractVector} = (true, true, true, true),
+                          otol::Real = 0.0)
     length(Os) == 4 || throw(ArgumentError("Eq. (31) is for ℓ = 4, got ℓ = $(length(Os))"))
     A, B, C, D = Os
     ζ = (is_fermionic[2] && is_fermionic[3]) ? -1 : 1
     out = PSFTerm[]
-    for x in psf(sp, A, B), y in psf(sp, C, D)                    # (1̄2̄)(3̄4̄)
+    for x in psf(sp, A, B; otol = otol), y in psf(sp, C, D; otol = otol)                    # (1̄2̄)(3̄4̄)
         a, c = x.position[1], y.position[1]
         push!(out, PSFTerm([a, 0.0, c], x.weight * y.weight, Int[]))
     end
-    for x in psf(sp, A, C), y in psf(sp, B, D)                    # (1̄3̄)(2̄4̄)
+    for x in psf(sp, A, C; otol = otol), y in psf(sp, B, D; otol = otol)                    # (1̄3̄)(2̄4̄)
         a, b = x.position[1], y.position[1]
         push!(out, PSFTerm([a, a + b, b], ζ * x.weight * y.weight, Int[]))
     end
-    for x in psf(sp, A, D), y in psf(sp, B, C)                    # (1̄4̄)(2̄3̄)
+    for x in psf(sp, A, D; otol = otol), y in psf(sp, B, C; otol = otol)                    # (1̄4̄)(2̄3̄)
         a, b = x.position[1], y.position[1]
         push!(out, PSFTerm([a, a + b, a], x.weight * y.weight, Int[]))
     end
@@ -226,15 +239,16 @@ end
 The PSF of `Os` restricted to one part: `:full` is Eq. (28), `:disconnected` is
 Eq. (31), and `:connected` is `S - S^dis`, represented by appending the
 disconnected terms with their weights negated. Linearity of every kernel in the
-PSF makes that representation exact.
+PSF makes that representation exact. `otol` is passed on to [`psf`](@ref).
 """
 function psf_part(sp::Spectrum, Os::Tuple; part::Symbol = :full,
-                  is_fermionic::Union{Tuple,AbstractVector} = fill(true, length(Os)))
-    part === :full && return psf(sp, Os)
-    part === :disconnected && return psf_disconnected(sp, Os; is_fermionic = is_fermionic)
+                  is_fermionic::Union{Tuple,AbstractVector} = fill(true, length(Os)),
+                  otol::Real = 0.0)
+    part === :full && return psf(sp, Os; otol = otol)
+    part === :disconnected && return psf_disconnected(sp, Os; is_fermionic = is_fermionic, otol = otol)
     if part === :connected
-        dis = psf_disconnected(sp, Os; is_fermionic = is_fermionic)
-        return vcat(psf(sp, Os), [PSFTerm(t.position, -t.weight, t.states) for t in dis])
+        dis = psf_disconnected(sp, Os; is_fermionic = is_fermionic, otol = otol)
+        return vcat(psf(sp, Os; otol = otol), [PSFTerm(t.position, -t.weight, t.states) for t in dis])
     end
     throw(ArgumentError("part must be :full, :connected or :disconnected, got $part"))
 end

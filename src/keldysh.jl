@@ -227,7 +227,7 @@ Keywords: `γ0` (required, > 0), `is_fermionic`, `sp`, `part` (`:full`,
 [`permuted_psfs`](@ref), which must match `part`), and `kernel_impl`
 (`:eq67b`, default, or `:eq63` for the independent route).
 """
-function keldysh_correlator(m::HubbardAtomModel, Os::Tuple, ω::AbstractVector{<:Real},
+function keldysh_correlator(m::AbstractModel, Os::Tuple, ω::AbstractVector{<:Real},
                             k::AbstractVector{<:Integer}; γ0::Real,
                             is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                             sp::Spectrum = spectrum(m), part::Symbol = :full,
@@ -257,7 +257,7 @@ end
 All `2^ℓ` Keldysh components at one frequency, keyed by the paper's digit
 strings (`"1111"`, `"2111"`, …). The PSFs are computed once and shared.
 """
-function keldysh_components(m::HubbardAtomModel, Os::Tuple, ω::AbstractVector{<:Real};
+function keldysh_components(m::AbstractModel, Os::Tuple, ω::AbstractVector{<:Real};
                             γ0::Real, is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                             sp::Spectrum = spectrum(m), part::Symbol = :full,
                             cache::Union{Nothing,Vector{PermutedPSF}} = nothing)

@@ -39,7 +39,7 @@ module HubbardAtom
 
 using LinearAlgebra
 
-export HubbardAtomModel, Operators, Spectrum,
+export AbstractModel, HubbardAtomModel, Operators, Spectrum,
        operators, spectrum, to_eigenbasis, thermal_average, quantum_numbers,
        eigenenergies_analytic, partition_function_analytic,
        level_position, half_interaction,
@@ -54,7 +54,26 @@ export HubbardAtomModel, Operators, Spectrum,
        omega_eta, keldysh_slots, keldysh_digits, keldysh_label, all_keldysh_components,
        permuted_keldysh, retarded_kernel, keldysh_kernel, keldysh_kernel_eq63,
        keldysh_correlator, keldysh_components,
+       anomalous_part,
+       HubbardDimerModel, DimerOperators, DimerContext, jordan_wigner,
+       site_op, momentum_op, site_exchange, dimer_c, dimer_alpha,
+       dimer_levels_analytic, dimer_partition_function_analytic,
+       dimer_propagator_exact, dimer_propagator, dimer_site_propagator,
+       momentum_allowed, all_momentum_tuples, dimer_operators_4p, dimer_psf_cache,
+       dimer_correlator_4p, dimer_disconnected_4p, dimer_connected_4p, dimer_vertex,
+       dimer_keldysh_4p, dimer_delta_part,
        BASIS_LABELS, DIM
+
+"""
+    AbstractModel
+
+A model with a finite Fock space and an inverse temperature field `β`. The
+spectral machinery (PSFs, Eq. (28); the Matsubara and Keldysh kernels; the
+permutation sums of Eqs. (39) and (67a)) needs nothing else, so it accepts any
+subtype for which `spectrum(m)` is defined: [`HubbardAtomModel`](@ref) and
+[`HubbardDimerModel`](@ref).
+"""
+abstract type AbstractModel end
 
 """Dimension of the Hubbard-atom Fock space."""
 const DIM = 4
@@ -74,7 +93,7 @@ Half-filled Hubbard atom at interaction `U` and inverse temperature `β`.
 The level position is pinned to `εd = -U/2`, which is the particle-hole
 symmetric point.
 """
-struct HubbardAtomModel
+struct HubbardAtomModel <: AbstractModel
     U::Float64
     β::Float64
 
@@ -216,22 +235,29 @@ large `βU`; `Z` itself is then reported as `e^(-βE₀) Σⱼ e^(-β(Eⱼ-E₀)
 """
 function spectrum(m::HubbardAtomModel; atol::Float64=1e-10)
     ops = operators(m)
-    H = ops.H
-
     # Q separates all four (N, Sz) sectors: the irrational coefficient keeps
     # N + √2 Sz from accidentally coinciding on distinct sectors.
-    Q = ops.N + sqrt(2.0) * ops.Sz
+    return _spectrum(ops.H, ops.N + sqrt(2.0) * ops.Sz, m.β; atol=atol)
+end
 
+"""
+    _spectrum(H, Q, β; atol) -> Spectrum
+
+Diagonalise `H`, fix the gauge inside degenerate blocks with `Q` (see
+[`_canonicalise!`](@ref)), and form the shifted Boltzmann weights. Shared by
+every model.
+"""
+function _spectrum(H::AbstractMatrix, Q::AbstractMatrix, β::Real; atol::Float64=1e-10)
     F = eigen(Hermitian((H + permutedims(H)) / 2))
     E = collect(F.values)
     V = Matrix(F.vectors)
-    _canonicalise!(E, V, Q; atol=atol)
+    _canonicalise!(E, V, Matrix{Float64}(Q); atol=atol)
 
     E0 = minimum(E)
-    w = exp.(-m.β .* (E .- E0))
+    w = exp.(-β .* (E .- E0))
     Zshift = sum(w)
     ρ = w ./ Zshift
-    Z = exp(-m.β * E0) * Zshift
+    Z = exp(-β * E0) * Zshift
 
     return Spectrum(E, V, ρ, Z)
 end
@@ -303,5 +329,6 @@ include("psf.jl")          # Step 2: partial spectral functions, Eq. (28)
 include("kernel.jl")       # Step 3: the Matsubara kernel, Eq. (46)
 include("correlator.jl")   # Steps 4-6: Eq. (39), and the 4p vertex
 include("keldysh.jl")      # Keldysh formalism: Eqs. (49), (52), (63), (67)
+include("dimer.jl")        # the two-site Hubbard model, 16 states
 
 end # module
