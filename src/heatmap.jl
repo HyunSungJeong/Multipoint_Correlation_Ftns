@@ -50,15 +50,18 @@ struct PSF2
 end
 
 """
-    merge_peaks(terms; tol = TOL_DEG, wtol = TOL_WEIGHT) -> (positions, weights)
+    merge_peaks_pairwise(terms; tol = TOL_DEG, wtol = TOL_WEIGHT) -> (positions, weights)
 
 Merge PSF peaks whose positions agree to `tol` in every coordinate, summing
 their weights, then drop merged peaks with `|weight| ≤ wtol`. Applied to the
 list `S` followed by `-S^dis`, this performs the subtraction `S^con = S - S^dis`
-peak by peak, so cancelling peaks disappear before any kernel sees them. A
-plain pairwise search: the atom has at most a few hundred peaks per permutation.
+peak by peak, so cancelling peaks disappear before any kernel sees them.
+
+A plain pairwise search, O(n²): fine for the atom's few hundred peaks per
+permutation, and kept as the reference for [`merge_peaks`](@ref), which does
+the same with a `Dict` (AIM task, I2).
 """
-function merge_peaks(terms::Vector{PSFTerm}; tol::Real = TOL_DEG, wtol::Real = TOL_WEIGHT)
+function merge_peaks_pairwise(terms::Vector{PSFTerm}; tol::Real = TOL_DEG, wtol::Real = TOL_WEIGHT)
     pos = Vector{Vector{Float64}}()
     wts = ComplexF64[]
     for t in terms
@@ -75,16 +78,24 @@ function merge_peaks(terms::Vector{PSFTerm}; tol::Real = TOL_DEG, wtol::Real = T
 end
 
 """
-    psf4_tables(sp, Os; part = :connected, is_fermionic, merge = true) -> Vector{PSF4}
+    psf4_tables(sp, Os; part = :connected, is_fermionic, merge = true, otol = 0, method = :dense)
+        -> Vector{PSF4}
 
 The 24 permuted PSFs of a 4p tuple `Os`, restricted to `part` (Eq. 31) and, by
-default, merged with [`merge_peaks`](@ref).
+default, merged with [`merge_peaks`](@ref). `method = :dense` goes through the
+reference [`psf`](@ref); `:chain` through [`psf4_tables_chain`](@ref).
 """
 function psf4_tables(sp::Spectrum, Os::Tuple; part::Symbol = :connected,
-                     is_fermionic::AbstractVector{Bool} = fill(true, 4), merge::Bool = true)
+                     is_fermionic::AbstractVector{Bool} = fill(true, 4), merge::Bool = true,
+                     otol::Real = 0.0, method::Symbol = :dense)
     length(Os) == 4 || throw(ArgumentError("PSF4 is for ℓ = 4"))
+    if method === :chain
+        merge || throw(ArgumentError("the chain walk always merges"))
+        return psf4_tables_chain(sp, Os; part = part, is_fermionic = is_fermionic, otol = otol)[1]
+    end
+    method === :dense || throw(ArgumentError("method must be :dense or :chain, got $method"))
     out = PSF4[]
-    for d in permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part)
+    for d in permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol)
         pos, w = merge ? merge_peaks(d.terms) :
                  ([t.position for t in d.terms], [t.weight for t in d.terms])
         push!(out, PSF4(Tuple(d.p), d.ζ, [Tuple(x) for x in pos], w))
@@ -94,9 +105,11 @@ end
 
 """    psf2_tables(sp, A, B; is_fermionic) -> Vector{PSF2} — the two permuted PSFs of `(A, B)`."""
 function psf2_tables(sp::Spectrum, A::AbstractMatrix, B::AbstractMatrix;
-                     is_fermionic::AbstractVector{Bool} = [true, true])
+                     is_fermionic::AbstractVector{Bool} = [true, true], otol::Real = 0.0,
+                     method::Symbol = :dense)
+    method === :chain && return psf2_tables_chain(sp, A, B; is_fermionic = is_fermionic, otol = otol)
     out = PSF2[]
-    for d in permuted_psfs(sp, (A, B); is_fermionic = is_fermionic)
+    for d in permuted_psfs(sp, (A, B); is_fermionic = is_fermionic, otol = otol)
         pos, w = merge_peaks(d.terms)
         push!(out, PSF2(Tuple(d.p), d.ζ, [x[1] for x in pos], w))
     end
@@ -184,21 +197,22 @@ struct KFTables
 end
 
 """
-    heatmap_tables(m::HubbardAtomModel, σσ′, formalism; part = :connected)
+    heatmap_tables(m::ImpurityModel, σσ′, formalism; part = :connected, otol = default_otol(m))
 
 Tables for `σσ′ ∈ (:updn, :upup)` and `formalism ∈ (:MF, :KF)`. `part` selects
 the PSF part fed to the 4p kernel (`:connected` for the vertex; `:full` and
 `:disconnected` for the tests).
 """
-function heatmap_tables(m::HubbardAtomModel, σσ′::Symbol, formalism::Symbol;
-                        part::Symbol = :connected, sp::Spectrum = spectrum(m))
+function heatmap_tables(m::ImpurityModel, σσ′::Symbol, formalism::Symbol;
+                        part::Symbol = :connected, sp::Spectrum = spectrum(m),
+                        otol::Real = default_otol(m), method::Symbol = default_psf_method(sp))
     ops = operators(m)
     σ, σ′ = σσ′ === :updn ? (:up, :dn) : σσ′ === :upup ? (:up, :up) :
         throw(ArgumentError("σσ′ must be :updn or :upup"))
-    dσ, dagσ = spin_operators(ops, σ)
-    dσ′, dagσ′ = spin_operators(ops, σ′)
-    con = psf4_tables(sp, (dσ, dagσ, dσ′, dagσ′); part = part)
-    leg = psf2_tables(sp, dσ, dagσ)
+    dσ, dagσ = impurity_operators(m, ops, σ)
+    dσ′, dagσ′ = impurity_operators(m, ops, σ′)
+    con = psf4_tables(sp, (dσ, dagσ, dσ′, dagσ′); part = part, otol = otol, method = method)
+    leg = psf2_tables(sp, dσ, dagσ; otol = otol, method = method)
     formalism === :MF && return MFTables(con, leg, σσ′ === :updn)
     formalism === :KF && return KFTables([KFPerm(P, keldysh_coefficients(P.p)) for P in con],
                                          leg, σσ′ === :updn)

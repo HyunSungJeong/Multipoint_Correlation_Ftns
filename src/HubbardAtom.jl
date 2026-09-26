@@ -40,7 +40,7 @@ module HubbardAtom
 using LinearAlgebra
 using StaticArrays
 
-export AbstractModel, HubbardAtomModel, Operators, Spectrum,
+export AbstractModel, ImpurityModel, HubbardAtomModel, impurity_operators, default_otol, Operators, Spectrum,
        operators, spectrum, to_eigenbasis, thermal_average, quantum_numbers,
        eigenenergies_analytic, partition_function_analytic,
        level_position, half_interaction,
@@ -68,6 +68,13 @@ export AbstractModel, HubbardAtomModel, Operators, Spectrum,
        mf_correlator_point, mf_leg, kf_correlator_point!, leg, amputate!, ph_frequencies,
        vertex_point!, vertex_grid, kf_correlator_grid, bare_vertex_kf, bare_vertex_mf,
        fret_updn, symlog,
+       AIMModel, AIMOperators, aim_model, discretize_box, box_edges, nbath, bath_op,
+       hybridization, propagator_free, free_poles, chi0_bubble, vertex_second_order,
+       aim_levels_nb1, aim_partition_function_nb1, aim_poles_nb1, singlet_triplet_gap_nb1,
+       propagator_poles, local_susceptibility, delta_part, singlet_triplet_gap,
+       default_psf_method, merge_peaks_pairwise, PeakAccumulator, add!, merged_peaks,
+       SparseOp, sparse_op, chain_walk2!, chain_walk4!, psf_chain, ChainStats,
+       psf4_tables_chain, psf2_tables_chain,
        BASIS_LABELS, DIM
 
 """
@@ -80,6 +87,27 @@ subtype for which `spectrum(m)` is defined: [`HubbardAtomModel`](@ref) and
 [`HubbardDimerModel`](@ref).
 """
 abstract type AbstractModel end
+
+"""
+    ImpurityModel <: AbstractModel
+
+A charge- and spin-conserving model with a single interacting impurity level
+`d_σ`. The impurity-level functions (`propagator`, `correlator_4p`,
+`disconnected_4p`, `connected_4p`, `vertex`, `heatmap_tables`) need only
+`d_σ` and `d†_σ`, supplied by [`impurity_operators`](@ref); Eq. (73) holds
+unchanged for any such model, because `⟨d_σ d_σ′⟩` vanishes by charge
+conservation. Subtypes: [`HubbardAtomModel`](@ref), [`AIMModel`](@ref).
+"""
+abstract type ImpurityModel <: AbstractModel end
+
+"""
+    default_otol(m) -> Float64
+
+The matrix-element tolerance of [`psf`](@ref) a model uses by default. `0` for
+models whose Hamiltonian is diagonal in the Fock basis (the atom), so their
+results are unchanged; models with hopping override it.
+"""
+default_otol(::AbstractModel) = 0.0
 
 """Dimension of the Hubbard-atom Fock space."""
 const DIM = 4
@@ -99,7 +127,7 @@ Half-filled Hubbard atom at interaction `U` and inverse temperature `β`.
 The level position is pinned to `εd = -U/2`, which is the particle-hole
 symmetric point.
 """
-struct HubbardAtomModel <: AbstractModel
+struct HubbardAtomModel <: ImpurityModel
     U::Float64
     β::Float64
 
@@ -337,5 +365,7 @@ include("correlator.jl")   # Steps 4-6: Eq. (39), and the 4p vertex
 include("keldysh.jl")      # Keldysh formalism: Eqs. (49), (52), (63), (67)
 include("dimer.jl")        # the two-site Hubbard model, 16 states
 include("heatmap.jl")      # vertex heat maps: grids, PSF-level subtraction, KF amputation
+include("psf_chain.jl")    # chain-walk PSFs and Dict peak merging (AIM task I1, I2)
+include("aim.jl")          # Anderson impurity model with a discrete bath
 
 end # module

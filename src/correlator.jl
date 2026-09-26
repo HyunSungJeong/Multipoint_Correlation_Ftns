@@ -71,15 +71,18 @@ end
 
 For every permutation `p` of the `ℓ` operators: `ζ_p`, and the PSF of the
 permuted tuple `O_p` restricted to `part` (see [`psf_part`](@ref)); `otol` is
-the matrix-element tolerance of [`psf`](@ref). Computing
+the matrix-element tolerance of [`psf`](@ref). `method = :auto` (default) uses the
+dense reference [`psf`](@ref) for Fock spaces of up to 16 states and the chain
+walk [`psf_chain`](@ref) above; `:dense` / `:chain` force one. Computing
 this once and reusing it across frequencies, Keldysh components and `γ₀` is what
 keeps the Keldysh scans cheap.
 """
 function permuted_psfs(sp::Spectrum, Os::Tuple;
                        is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
-                       part::Symbol = :full, otol::Real = 0.0)
+                       part::Symbol = :full, otol::Real = 0.0, method::Symbol = :auto)
     ℓ = length(Os)
     ℓ ≥ 2 || throw(ArgumentError("need at least ℓ = 2 operators, got $ℓ"))
+    method === :auto && (method = default_psf_method(sp))
     length(is_fermionic) == ℓ ||
         throw(DimensionMismatch("is_fermionic must have one entry per operator"))
     part === :full || ℓ == 4 ||
@@ -89,7 +92,8 @@ function permuted_psfs(sp::Spectrum, Os::Tuple;
         ζ = permutation_sign(p, is_fermionic)
         Op = ntuple(i -> Os[p[i]], ℓ)
         push!(out, PermutedPSF(p, ζ,
-              psf_part(sp, Op; part = part, is_fermionic = is_fermionic[p], otol = otol)))
+              psf_part(sp, Op; part = part, is_fermionic = is_fermionic[p], otol = otol,
+                       method = method)))
     end
     return out
 end
@@ -120,12 +124,15 @@ Keywords:
   - `sp` — a precomputed [`Spectrum`](@ref); pass one to avoid rediagonalising
     when sweeping frequencies.
   - `atol` — tolerance on the spectral part of a vanishing composite.
+  - `otol` — matrix-element tolerance of [`psf`](@ref), used when no `cache` is given.
+  - `method` — `:auto`, `:dense` or `:chain`, see [`permuted_psfs`](@ref).
 """
 function correlator(m::AbstractModel, Os::Tuple, ms::AbstractVector{MatsubaraFreq};
                     is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                     sp::Spectrum = spectrum(m), atol::Real = 1e-10,
                     kernel::Symbol = :full, part::Symbol = :full,
-                    cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+                    cache::Union{Nothing,Vector{PermutedPSF}} = nothing, otol::Real = 0.0,
+                    method::Symbol = :auto)
     ℓ = length(Os)
     ℓ ≥ 2 || throw(ArgumentError("need at least ℓ = 2 operators, got $ℓ"))
     length(ms) == ℓ ||
@@ -139,7 +146,8 @@ function correlator(m::AbstractModel, Os::Tuple, ms::AbstractVector{MatsubaraFre
         throw(ArgumentError("kernel must be :full or :regular, got $kernel"))
 
     data = cache === nothing ?
-           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol,
+                         method = method) : cache
 
     total = zero(ComplexF64)
     for d in data
@@ -175,11 +183,11 @@ evaluated off the imaginary axis, where the regular kernel is never singular.
 function regular_sum(sp::Spectrum, Os::Tuple, z::AbstractVector{<:Number};
                      is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                      part::Symbol = :full,
-                     cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+                     cache::Union{Nothing,Vector{PermutedPSF}} = nothing, otol::Real = 0.0)
     ℓ = length(Os)
     length(z) == ℓ || throw(DimensionMismatch("got $(length(z)) frequencies for $ℓ operators"))
     data = cache === nothing ?
-           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol) : cache
     total = zero(ComplexF64)
     for d in data
         for t in d.terms
@@ -220,13 +228,13 @@ function anomalous_part(m::AbstractModel, Os::Tuple, ms::AbstractVector{Matsubar
                         is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                         sp::Spectrum = spectrum(m), atol::Real = 1e-10,
                         part::Symbol = :full,
-                        cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+                        cache::Union{Nothing,Vector{PermutedPSF}} = nothing, otol::Real = 0.0)
     ℓ = length(Os)
     sum(f -> f.m, ms) == 0 || throw(ArgumentError("external frequencies must conserve energy"))
     ch = Set(channel)
     chc = setdiff(Set(1:ℓ), ch)
     data = cache === nothing ?
-           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol) : cache
     total = zero(ComplexF64)
     for d in data
         msp = [ms[d.p[i]] for i in 1:ℓ]
@@ -251,22 +259,23 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    propagator(m::HubbardAtomModel, ν::MatsubaraFreq; kwargs...) -> ComplexF64
+    propagator(m::ImpurityModel, ν::MatsubaraFreq; σ = :up, kwargs...) -> ComplexF64
 
-The single-particle propagator `G(iν) = -⟨T d_σ(τ) d†_σ⟩` in Matsubara
-frequency, assembled from Eq. (39) with `O = (d_σ, d†_σ)`.
+The single-particle propagator `G(iν) = -⟨T d_σ(τ) d†_σ⟩` of the impurity level
+in Matsubara frequency, assembled from Eq. (39) with `O = (d_σ, d†_σ)`.
 
 This is the Step 4 milestone: it must reproduce Appendix E's exact result
 `G(iν) = ½ Σ± (iν ± U/2)⁻¹` to machine precision, which
 [`propagator_exact`](@ref) supplies.
 """
-function propagator(m::HubbardAtomModel, ν::MatsubaraFreq;
-                    sp::Spectrum = spectrum(m), ops::Operators = operators(m),
-                    atol::Real = 1e-10)
+function propagator(m::ImpurityModel, ν::MatsubaraFreq;
+                    sp::Spectrum = spectrum(m), ops = operators(m),
+                    atol::Real = 1e-10, otol::Real = default_otol(m), σ::Symbol = :up)
     fermionic(ν) ||
         throw(ArgumentError("the propagator takes a fermionic frequency, got m = $(ν.m)"))
-    return correlator(m, (ops.d_up, ops.dag_up), [ν, MatsubaraFreq(-ν.m)];
-                      sp = sp, atol = atol)
+    d, ddag = impurity_operators(m, ops, σ)
+    return correlator(m, (d, ddag), [ν, MatsubaraFreq(-ν.m)];
+                      sp = sp, atol = atol, otol = otol)
 end
 
 """
@@ -312,18 +321,27 @@ function spin_operators(ops::Operators, σ::Symbol)
 end
 
 """
+    impurity_operators(m::ImpurityModel, ops, σ) -> (d_σ, d†_σ)
+
+The impurity annihilator and creator for spin `σ ∈ (:up, :dn)`, in the Fock
+basis of `ops = operators(m)`. The only model-specific input of the
+impurity-level functions.
+"""
+impurity_operators(::HubbardAtomModel, ops::Operators, σ::Symbol) = spin_operators(ops, σ)
+
+"""
     correlator_4p(m, σ, σ′, ms; kwargs...) -> ComplexF64
 
 The full 4p correlator `G_{σσ′}` of Eq. (71), from Eq. (39) with
 `O = (d_σ, d†_σ, d_σ′, d†_σ′)` — all 24 permutations.
 """
-function correlator_4p(m::HubbardAtomModel, σ::Symbol, σ′::Symbol,
+function correlator_4p(m::ImpurityModel, σ::Symbol, σ′::Symbol,
                        ms::AbstractVector{MatsubaraFreq};
-                       sp::Spectrum = spectrum(m), ops::Operators = operators(m),
-                       atol::Real = 1e-10)
-    dσ, dagσ = spin_operators(ops, σ)
-    dσ′, dagσ′ = spin_operators(ops, σ′)
-    return correlator(m, (dσ, dagσ, dσ′, dagσ′), ms; sp = sp, atol = atol)
+                       sp::Spectrum = spectrum(m), ops = operators(m),
+                       atol::Real = 1e-10, otol::Real = default_otol(m))
+    dσ, dagσ = impurity_operators(m, ops, σ)
+    dσ′, dagσ′ = impurity_operators(m, ops, σ′)
+    return correlator(m, (dσ, dagσ, dσ′, dagσ′), ms; sp = sp, atol = atol, otol = otol)
 end
 
 """
@@ -340,14 +358,14 @@ vanishes outright.
 
 By default the legs use the *computed* propagator, so the subtraction is
 internally consistent with Eq. (39); pass `exact_legs = true` to use
-Appendix E's closed form instead.
+Appendix E's closed form instead (Hubbard atom only).
 """
-function disconnected_4p(m::HubbardAtomModel, σ::Symbol, σ′::Symbol,
+function disconnected_4p(m::ImpurityModel, σ::Symbol, σ′::Symbol,
                          ms::AbstractVector{MatsubaraFreq};
-                         sp::Spectrum = spectrum(m), ops::Operators = operators(m),
-                         atol::Real = 1e-10, exact_legs::Bool = false)
+                         sp::Spectrum = spectrum(m), ops = operators(m),
+                         atol::Real = 1e-10, otol::Real = default_otol(m), exact_legs::Bool = false)
     G = exact_legs ? (ν -> propagator_exact(m, ν)) :
-                     (ν -> propagator(m, ν; sp = sp, ops = ops, atol = atol))
+                     (ν -> propagator(m, ν; sp = sp, ops = ops, atol = atol, otol = otol))
     δ23 = (ms[2].m + ms[3].m == 0) ? 1 : 0
     δ12 = (ms[1].m + ms[2].m == 0) ? 1 : 0
     spin_factor = (σ === σ′ ? δ23 : 0) - δ12
@@ -360,7 +378,7 @@ end
 
 `G^con = G - G^dis`, Eq. (73).
 """
-function connected_4p(m::HubbardAtomModel, σ::Symbol, σ′::Symbol,
+function connected_4p(m::ImpurityModel, σ::Symbol, σ′::Symbol,
                       ms::AbstractVector{MatsubaraFreq}; kwargs...)
     return correlator_4p(m, σ, σ′, ms; kwargs...) -
            disconnected_4p(m, σ, σ′, ms; kwargs...)
@@ -382,11 +400,11 @@ Eq. (76), where the legs are evaluated at real frequencies. On the Matsubara
 axis the legs sit exactly on discrete frequencies and there is nothing to
 shift.
 """
-function vertex(m::HubbardAtomModel, σ::Symbol, σ′::Symbol,
+function vertex(m::ImpurityModel, σ::Symbol, σ′::Symbol,
                 ms::AbstractVector{MatsubaraFreq};
-                sp::Spectrum = spectrum(m), ops::Operators = operators(m),
-                atol::Real = 1e-10, exact_legs::Bool = false)
-    kw = (sp = sp, ops = ops, atol = atol)
+                sp::Spectrum = spectrum(m), ops = operators(m),
+                atol::Real = 1e-10, otol::Real = default_otol(m), exact_legs::Bool = false)
+    kw = (sp = sp, ops = ops, atol = atol, otol = otol)
     Gcon = correlator_4p(m, σ, σ′, ms; kw...) -
            disconnected_4p(m, σ, σ′, ms; kw..., exact_legs = exact_legs)
     G = exact_legs ? (ν -> propagator_exact(m, ν)) : (ν -> propagator(m, ν; kw...))

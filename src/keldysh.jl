@@ -232,7 +232,7 @@ function keldysh_correlator(m::AbstractModel, Os::Tuple, ω::AbstractVector{<:Re
                             is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                             sp::Spectrum = spectrum(m), part::Symbol = :full,
                             cache::Union{Nothing,Vector{PermutedPSF}} = nothing,
-                            kernel_impl::Symbol = :eq67b)
+                            kernel_impl::Symbol = :eq67b, otol::Real = 0.0)
     ℓ = length(Os)
     length(ω) == ℓ || throw(DimensionMismatch("got $(length(ω)) frequencies for $ℓ operators"))
     abs(sum(ω)) ≤ 1e-12 * max(1.0, maximum(abs, ω)) ||
@@ -243,7 +243,7 @@ function keldysh_correlator(m::AbstractModel, Os::Tuple, ω::AbstractVector{<:Re
     kfun = kernel_impl === :eq67b ? keldysh_kernel : keldysh_kernel_eq63
 
     data = cache === nothing ?
-           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol) : cache
     total = zero(ComplexF64)
     for d in data, t in d.terms
         total += d.ζ * kfun(ω, t.position, k, d.p, γ0) * t.weight
@@ -260,10 +260,10 @@ strings (`"1111"`, `"2111"`, …). The PSFs are computed once and shared.
 function keldysh_components(m::AbstractModel, Os::Tuple, ω::AbstractVector{<:Real};
                             γ0::Real, is_fermionic::AbstractVector{Bool} = fill(true, length(Os)),
                             sp::Spectrum = spectrum(m), part::Symbol = :full,
-                            cache::Union{Nothing,Vector{PermutedPSF}} = nothing)
+                            cache::Union{Nothing,Vector{PermutedPSF}} = nothing, otol::Real = 0.0)
     ℓ = length(Os)
     data = cache === nothing ?
-           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part) : cache
+           permuted_psfs(sp, Os; is_fermionic = is_fermionic, part = part, otol = otol) : cache
     return Dict(keldysh_label(k, ℓ) =>
                 keldysh_correlator(m, Os, ω, k; γ0 = γ0, is_fermionic = is_fermionic,
                                    sp = sp, cache = data)

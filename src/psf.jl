@@ -239,16 +239,18 @@ end
 The PSF of `Os` restricted to one part: `:full` is Eq. (28), `:disconnected` is
 Eq. (31), and `:connected` is `S - S^dis`, represented by appending the
 disconnected terms with their weights negated. Linearity of every kernel in the
-PSF makes that representation exact. `otol` is passed on to [`psf`](@ref).
+PSF makes that representation exact. `otol` is passed on to [`psf`](@ref);
+`method = :chain` computes `S` with the chain walk [`psf_chain`](@ref).
 """
 function psf_part(sp::Spectrum, Os::Tuple; part::Symbol = :full,
                   is_fermionic::Union{Tuple,AbstractVector} = fill(true, length(Os)),
-                  otol::Real = 0.0)
-    part === :full && return psf(sp, Os; otol = otol)
+                  otol::Real = 0.0, method::Symbol = :dense)
+    S(Os) = method === :chain ? psf_chain(sp, Os; otol = otol) : psf(sp, Os; otol = otol)
+    part === :full && return S(Os)
     part === :disconnected && return psf_disconnected(sp, Os; is_fermionic = is_fermionic, otol = otol)
     if part === :connected
         dis = psf_disconnected(sp, Os; is_fermionic = is_fermionic, otol = otol)
-        return vcat(psf(sp, Os; otol = otol), [PSFTerm(t.position, -t.weight, t.states) for t in dis])
+        return vcat(S(Os), [PSFTerm(t.position, -t.weight, t.states) for t in dis])
     end
     throw(ArgumentError("part must be :full, :connected or :disconnected, got $part"))
 end
