@@ -26,6 +26,7 @@ covers all three models.
 | Hubbard atom, MF and KF, heat maps of Figs. 10, 11 | 4 | `notebooks/hubbard_atom_spectral_representation.ipynb` |
 | Hubbard dimer | 16 | `notebooks/hubbard_dimer.ipynb` |
 | AIM, `N_b = 1, 2, 3` bath sites | 16, 64, 256 | `notebooks/aim.ipynb` |
+| PSF Lanczos: Liouvillian matrix elements of 3p PSFs (all three models, random `D = 6`) | 4–64 | `notebooks/psf_lanczos.ipynb` |
 
 ## Status
 
@@ -94,6 +95,31 @@ Eq. (79) with `N_b` bath sites from moment matching of the box hybridisation
 | `aim_task.pdf` | B6 | cost of tables and grids | see Performance |
 | `aim_task.pdf` | O1 | local `χ_loc`, sheet table | all printed digits |
 | `aim_task.pdf` | O2, O3 | δ(ω₁₂) term vs `βΔ_ST`; heat maps next to the atom's | observations, see Findings |
+
+### PSF Lanczos
+
+From 3p PSF data and the two 2p PSFs `S[O³†, O³]`, `S[O¹, O¹†]` alone (`psf_krylov`), the block Jacobi
+matrices `𝕁′`, `𝕁` of Liouvillian matrix elements in the Krylov bases of `|O¹†)` and `|O³)` (plain
+thermal product, full `𝓛`), and the coupling `V_mn = (q′_m|M_{O²}|q_n)`. Together they give
+`F(z₁, z₂) = N₁ Σ_mn [(z₁-𝕁′)⁻¹]_{1m} V_mn [(z₂-𝕁)⁻¹]_{n1} N₃`. The method runs in the pole basis and is checked
+against an operator-space block Lanczos (R1) and the Lehmann resolvent (R2). Fixtures: F1 random `D = 6`
+(`M = 1`), F1b (`M = M′ = 2`), F2 atom over `PARAMS`, F3 dimer (`M = M′ = 2`), F4 AIM `N_b = 1, 2`.
+Krylov dimensions (R′, R): 31 (F1, = D(D-1)+1), 32 (F1b), 2 (F2), 8 (F3), 8 / 56 (F4). No block fixture deflates.
+
+| Sheet | Item | Check | Accuracy |
+|:--|:--|:--|:--|
+| `psf_lanczos_task.md` | L1 | 3p positions = `(E₂₁, E₃₁)`; `∫A₃`, `∫A₁` = Gram matrices; `Σ w = ⟨O¹O²O³⟩` | ≤ 7e-16 |
+| `psf_lanczos_task.md` | L2 | atom: `W₃` peaks `p`, `1-p` at `±u`, `N₃² = ½`, `ϵ₁ = u tanh(βu/2)`, `t₂ = |u|/cosh(βu/2)`, `𝕁′ = 𝕁` | ≤ 4e-16 |
+| `psf_lanczos_task.md` | L3 | `ϵ_n`, `t_n` vs R1, first 20 levels; Krylov dimensions | ≤ 1e-14; equal (R1 raw 244 vs 56 for `N_b = 2`, see Findings) |
+| `psf_lanczos_task.md` | L4 | Gauss quadrature on `𝕁` and `𝕁_ref` | ≤ 3e-13 |
+| `psf_lanczos_task.md` | L5 | `U†U = 1`; `B_β p_n(b_β) = U_n`, n ≤ 10 | ≤ 6e-13; atom at `βU = 80`: 5e-8 (`@test_broken`) |
+| `psf_lanczos_task.md` | L6 | `V` vs `V_ref` (20 blocks); `N₁V₁₁N₃ = ⟨O¹O²O³⟩` | ≤ 8e-14 |
+| `psf_lanczos_task.md` | L7 | Eq. (12) with `V_ref` vs every aggregated 3p weight | ≤ 2e-14; Golub-Welsch from R1's own chains ≤ 1.4e-12 |
+| `psf_lanczos_task.md` | L8 | resolvent vs Lehmann, 36 `(z₁, z₂)`; Eq. (11) vs `(z-𝕁)⁻¹` | ≤ 2e-13 relative |
+| `psf_lanczos_task.md` | L9 | truncated moments `a < N′`, `b < N`; negative control at `a = N′` or `b = N` | ≤ 2e-15; ≥ 7e-5 (fails, as required) |
+| `psf_lanczos_task.md` | L10 | 3p support ⊆ 2p supports; `s̃ = B′†KB` | 0 outside; ≤ 6e-16 |
+| `psf_lanczos_task.md` | L11 | uniform `W₃`: PSF reproduced, chain not Liouvillian | ≤ 6e-16; ≥ 0.21 (fails, as required) |
+| `psf_lanczos_task.md` | L12 | atom at `β|U|` up to 700 | observation, see Findings |
 
 ## Findings
 
@@ -164,6 +190,24 @@ vertex drops to 2×10⁻⁵ of the atom's and the KF maps lose the atom's cross;
 the moment free, or for the unscreened `N_b = 2` doublet, the atom's structure
 survives. `F^[η]_↑↑ ≡ 0` is atom-specific: nonzero for every AIM case.
 
+**PSF Lanczos, AIM `N_b = 2`: deep coefficients diverge (pitfall P5).** The PSF side works on 56 merged
+support points. The operator side works on 244 eigen-operators, whose degenerate Liouvillian eigenvalues roundoff
+splits by ≤ 8e-15, with weights down to 2.5e-13 at `β = 10`. The two chains agree to 1e-14 up to level ≈ 37. After
+that the difference grows about 30× per level and is `O(1)` by level 46, and the operator-space chain runs on to 244
+levels. Both chains satisfy every gauge-invariant identity (L4, L7, L8) to 1e-15. The reference applies the PSFs' `otol` to the rotated
+operators (P3). Without it, 3675 roundoff elements (≤ 6e-15) enter as extra eigen-operators.
+
+**PSF Lanczos, L12: `K` is not ill-conditioned by ρ.** For a support point from a single eigenstate pair,
+`K = s̃/√(w′w) = O²₂₃ × phase`: the Boltzmann factor cancels. The atom has `max|K| = cond⁺K = 1` at every `β`. `V`
+and the sum rule hold to 1e-16 up to `β|U| = 700`. The breakdowns come elsewhere:
+- the polynomial recursion of L5 loses `≈ e^{β|U|/4} ε` (> 1e-11 from `β|U| ≈ 60`);
+- for `U < 0` from `β|U| = 120`, R1's stop tolerance cuts the light level that carries the 3p peak, so L7 fails there because of the reference;
+- the pole-basis chain itself is exact up to `β|U| = 240` (`t₂ = 9e-27`), 4e-8 off at 400, and wrong at 700. There `t₂ ≈ 1e-76` lies below the residual that two reorthogonalisation passes leave behind.
+
+**PSF Lanczos, P6: `V` is dense.** There is no decay away from the `(1,1)` corner and no effective low rank: ranks are
+31/31, 7/8 and 54/56 (F1, F3, AIM `N_b = 2`). When the bra and ket chains coincide (`O¹† = O³`), `V` has a diagonal
+ridge near `⟨n_↓⟩ = ½`.
+
 ## Performance
 
 **Atom heat maps** (`scripts/heatmap_timing.jl`, fresh process, one thread, one
@@ -232,6 +276,7 @@ src/dimer.jl            two-site model: operators, closed forms, k-basis vertex
 src/heatmap.jl          grid evaluation, PSF-level subtraction, KF amputation (D2 legs)
 src/psf_chain.jl        chain-walk PSFs (I1), Dict peak merging (I2)
 src/aim.jl              AIM: discretisation, operators, closed forms, χ₀, χ_loc
+src/psf_lanczos.jl      PSF Lanczos: Jacobi matrices and coupling V from PSF data; resolvent, Eq. (12)
 scripts/heatmap_timing.jl  first-call / warm timings in a fresh process
 test/runtests.jl        atom spectrum; includes all other test files
 test/test_psf.jl, test_kernel.jl, test_correlator.jl   atom, Matsubara
@@ -239,18 +284,23 @@ test/test_keldysh.jl    K1-K3, V1-V6
 test/test_dimer.jl      D1-D11
 test/test_heatmap.jl    H1-H4, P1 targets
 test/test_aim.jl        AIM task: Sec. 1, I1-I2, A1-A3, B1-B5, O1
+test/test_psf_lanczos.jl  PSF Lanczos task: L1-L11
+test/psf_lanczos_reference.jl  fixtures F1-F4, operator-space Lanczos (R1), Lehmann resolvent (R2)
+test/psf_lanczos_checks.jl     L1-L11 as functions returning achieved errors (tests and notebook)
 notebooks/hubbard_atom_spectral_representation.ipynb, .pdf
 notebooks/hubbard_dimer.ipynb, .pdf
 notebooks/aim.ipynb, .pdf
+notebooks/psf_lanczos.ipynb, .pdf
 notebooks/figures/heatmaps/   atom P1-P5 (PNG, PDF, .jld2)
 notebooks/figures/aim/        AIM O2, O3 (PNG, PDF, .jld2)
+notebooks/figures/psf_lanczos/  PSF Lanczos P1-P6 (PNG, PDF, .jld2)
 ```
 
 ## Reproducibility
 
 Every number quoted in this README is produced by a test (`test/`) or a cell of
 a committed notebook (outputs included). `julia --project test/runtests.jl`
-runs **59,353 assertions**, all passing, on Julia 1.13.0. The one
+runs **59,664 assertions**, all passing, plus one `@test_broken` (L5, atom at `βU = 80`), on Julia 1.13.0. The one
 file not committed is the 82 MB array of all 16 atom KF components
 (`p2_kf_vertex_full.jld2`), which the atom notebook regenerates in seconds.
 
@@ -263,7 +313,7 @@ julia --project test/runtests.jl
 
 Notebooks need [IJulia](https://github.com/JuliaLang/IJulia.jl); the kernelspec
 is `julia-1.13`. `notebooks/aim.ipynb` takes about 15 minutes with
-`JULIA_NUM_THREADS=4` (mostly the `N_b = 2` Keldysh slices); the others take
-under a minute to a few minutes. Dependencies: `LinearAlgebra`, `Printf`, `Test`
+`JULIA_NUM_THREADS=4` (mostly the `N_b = 2` Keldysh slices); `notebooks/psf_lanczos.ipynb`
+takes about two minutes; the others take under a minute to a few minutes. Dependencies: `LinearAlgebra`, `Printf`, `Test`
 (stdlib), `StaticArrays`; the heat-map and AIM notebooks also use `CairoMakie`,
 `JLD2`, `BenchmarkTools`.

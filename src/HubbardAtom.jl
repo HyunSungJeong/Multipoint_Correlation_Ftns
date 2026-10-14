@@ -75,6 +75,8 @@ export AbstractModel, ImpurityModel, HubbardAtomModel, impurity_operators, defau
        default_psf_method, merge_peaks_pairwise, PeakAccumulator, add!, merged_peaks,
        SparseOp, sparse_op, chain_walk2!, chain_walk4!, psf_chain, ChainStats,
        psf4_tables_chain, psf2_tables_chain,
+       PSFKrylovInput, PSFKrylov, psf_krylov_input, psf_krylov, jacobi_from_measure, jacobi_matrix,
+       resolvent_column, resolvent_krylov, reconstruct_psf,
        BASIS_LABELS, DIM
 
 """
@@ -366,6 +368,7 @@ include("keldysh.jl")      # Keldysh formalism: Eqs. (49), (52), (63), (67)
 include("dimer.jl")        # the two-site Hubbard model, 16 states
 include("heatmap.jl")      # vertex heat maps: grids, PSF-level subtraction, KF amputation
 include("psf_chain.jl")    # chain-walk PSFs and Dict peak merging (AIM task I1, I2)
+include("psf_lanczos.jl")  # Liouvillian matrix elements of 3p PSFs from PSF data (PSF Lanczos task)
 include("aim.jl")          # Anderson impurity model with a discrete bath
 
 end # module
