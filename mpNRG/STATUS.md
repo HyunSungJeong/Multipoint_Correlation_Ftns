@@ -172,6 +172,33 @@ tolerances quoted in the findings below. Full suite: **2897 assertions, all pass
 | export | `G(iν)` through `HubbardAtom` kernels from exported PSFs vs `HubbardAtom` | 5.5e-14 |
 
 
+## Performance (P10)
+
+Notebook, section "Performance": SIAM `U = 0.2`, `Δ = 0.04`, `T = 1e-4`, `Λ = 4`,
+`N = 18`, grid `n_dec = 8`, one z, 4 threads, abelian `U(1)×U(1)×Z₂`
+(`N_keep` counts states). Operators `d↑, d†↑` (2p), `+ n↓` (3p),
+`d↑, d†↑, d↓, d†↓` (4p, one permutation).
+
+| `N_keep` | sweep [s] | 2p [s] | 3p [s] | 4p [s] | 4p cost: shell traces / composites / slice refinements |
+|--:|--:|--:|--:|--:|:--|
+| 25 | 0.18 | 0.01 | 0.28 | 29.8 | 249,503 / 1,917 / 373,258 |
+| 50 | 0.14 | 0.01 | 0.67 | 70.6 | 320,227 / 1,917 / 453,614 |
+| 100 | 0.19 | 0.02 | 1.51 | 248 | 313,028 / 1,725 / 631,569 |
+
+Other measured costs: the V8 4p marginals (`N = 12`, `N_keep = 100`, dense
+3D histograms on the dataset's grid) took 80–200 s per PSF on 2 threads; the
+SIAM example (`T = 1e-3`, `N_keep = 100`, `n_dec = 16`) 22 min on 2 threads, of
+which the 4p PSF is almost all; the full test suite 16 min on 2 threads.
+
+Where the time goes: 2p and 3p are cheap (`~N` shell traces, `~N²`
+refinements); the 4p KKKD/KKDK/KDKK strings need a 3p PSF of composites per
+shell (`~N³`, Lee p. 18), and each slice refinement is a block product whose
+cost grows with `N_keep`. Implemented: threads over the independent composite
+PSFs (depth-first schedule), grouping of composites with equal keys, dense
+accumulation when the histogram fits (`nb^ℓ ≤ 2²⁵` bins). Not implemented:
+SU(2) (open issue 1), compression of carried slices (the hook interface
+exposes their singular values, see the notebook).
+
 ## Deviations from Lee 2021 and why
 
 1. **One generic engine.** Lee describes 2p, 3p and 4p separately and asks for
