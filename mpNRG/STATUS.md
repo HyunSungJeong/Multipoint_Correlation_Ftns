@@ -30,6 +30,63 @@ Task sheet: [`docs/TASK.md`](docs/TASK.md). Package: `MultipointNRG` (this folde
   arrays derived from it (its 2p PSFs and the marginals and totals of its 4p
   PSFs, next to ours) and is distributed under the same license.
 
+## TNOps refactor (R0–R6)
+
+Task sheet: [`docs/TNOPS_REFACTOR.md`](docs/TNOPS_REFACTOR.md). The tensor
+layer moves into the sibling package [`TNOps`](../TNOps/README.md); its own
+record is [`TNOps/STATUS.md`](../TNOps/STATUS.md).
+
+**Starting point.** Commit `bb8b1976c98027c7e229de493614add5444d6a05`
+(`bb8b197`, "mpNRG: STATUS branch note …") on `claude/practical-archimedes`,
+tagged locally as `pre-tensor-refactor`. **The tag could not be pushed**: the
+session's git proxy refuses tag pushes and ref deletions (`git push origin
+pre-tensor-refactor` → "remote end hung up", twice), while branch pushes work.
+As the sheet prescribes, the tagged hash is recorded here and in
+`TNOps/STATUS.md` instead; `git worktree add <dir> bb8b197` reproduces the
+tagged tree.
+
+**Environment.** The same container as the mpNRG task: Julia 1.13.0 from
+conda-forge, packages from the General registry via git (`JULIA_PKG_SERVER=""`),
+4 CPU threads, 15 GB RAM. The papers and the LMU Open Data 613 dataset of V8
+are still present in `refs/` (gitignored), so V8 can be re-run.
+
+**R0 baseline.**
+
+- Full suite at `bb8b197`: 2897 assertions, all passing (6 min 34 s, 4 threads).
+- `test/baseline/cases.jl` defines four small calculations (SIAM, Λ = 4):
+  `untrunc` (U1×U1×Z2, N = 2, no truncation), `trunc` (U1×U1×Z2, N = 5,
+  N_keep = 24), `parity` (Z2(:Pf) only, N = 4, N_keep = 32) and `field` (B ≠ 0,
+  no spin degeneracy, N = 5, N_keep = 28). There is no complex-valued built-in
+  model; the complex path is covered by a PSF of the complex operator
+  `(1 + 0.5i) d↑` in `trunc`. Recorded per case: energies, kept counts and
+  truncation records of every shell, ground-state shifts, ω_n, n₀; shell
+  weights, ln Z, E_ref, the eigenvalues of every ρ̄^n_KK; four thermal averages,
+  `thermal_average_product` and `fdm_thermodynamics`; binned PSFs of all
+  permutations of (d↑, d†↑) and (q↑, q†↑) with q↑ = [d↑, H_int], of
+  (q↑, d†↑, n↓) (3p) and of (d↑, d†↑, d↓, d†↓) (4p, on a coarser grid,
+  n_dec = 4, to keep the file small); exact mode (2p, 3p) for `untrunc` and
+  2p for `trunc`, with weights summed per position (per-term weights depend on
+  the basis inside degenerate subspaces); `abs = true` for `field`; the
+  `:left` form for one 3p PSF; the singular values of `SingularValueRecorder`
+  for one 3p call.
+- `test/baseline/make_baseline.jl` wrote `baseline.jld2` (12.6 MB), the frozen
+  fixtures of the old internals (`fusionmap` of every shell, `kron_op` of the
+  three terms of H_2, `truncate_shell` on every spectrum of every case, `refine`
+  of d↑, n↓, d†↓ at two shells, `_rotate`, the FDM backward step at two shells),
+  `old_output.jld2` (a `save_results` file) and `tnops_fixtures.jl` (the
+  `fusionmap`/`kron_op`/`truncate_shell` fixtures as Julia literals for
+  `TNOps/test`, which has no JLD2).
+- `test/baseline/compare.jl` holds the tolerances, fixed before any code
+  change (header of that file); `test_baseline.jl` runs the comparison. Self
+  check on the unchanged code (`bb8b197`): every row passes, largest deviation
+  1e-13 of the largest weight in the PSF totals (run-to-run noise of the
+  threaded engine's summation order), kept counts identical, no bin flips.
+- `test_io.jl` gained a test that loads `old_output.jld2` and reproduces it.
+
+| Phase | Content | Commit (pushed) |
+|:--|:--|:--|
+| R0 | baseline, fixtures, old-format file, tag recorded | see `TNOps/STATUS.md` |
+
 ## Phase log
 
 | Phase | Content | Commit |
