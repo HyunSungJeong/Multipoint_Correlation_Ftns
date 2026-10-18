@@ -4,11 +4,10 @@ Task sheet: [`docs/TASK.md`](docs/TASK.md). Package: `MultipointNRG` (this folde
 
 ## Environment and bookkeeping
 
-- **Branch.** The task sheet names `claude/practical-archimedes`; this session was
-  configured to develop on `claude/cool-sagan-txmva3` and must not push
-  elsewhere without explicit permission. Both branches pointed at the same
-  commit `541d40a` when the work started, so the history here applies to either.
-  All commits are on `claude/cool-sagan-txmva3`.
+- **Branch.** The work is on `claude/practical-archimedes`, as the task sheet
+  says. It was first pushed to `claude/cool-sagan-txmva3` (the session's default
+  branch); both pointed at `541d40a` when the work started, so the phase commits
+  fast-forwarded onto `claude/practical-archimedes` unchanged.
 - **Julia.** `julialang-s3.julialang.org` and `pkg.julialang.org` are blocked by
   the environment's network policy. Julia 1.13.0 was installed from conda-forge;
   packages come from the General registry via git (`JULIA_PKG_SERVER=""`).
