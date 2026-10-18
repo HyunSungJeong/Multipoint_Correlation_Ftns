@@ -11,6 +11,8 @@ const FILES = [
     "test_v2_chain.jl",
     # P3
     "test_v3_spectra.jl",
+    # P4
+    "test_v1_chain.jl", "test_v4_operators.jl",
 ]
 
 @testset "MultipointNRG" begin

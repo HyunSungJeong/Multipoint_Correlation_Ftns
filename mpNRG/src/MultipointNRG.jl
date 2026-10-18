@@ -42,6 +42,8 @@ include("model/model.jl")
 include("model/builtin.jl")
 # forward sweep
 include("nrg/sweep.jl")
+# operator projections, density matrix
+include("operators/projection.jl")
 # reference ED (independent of nrg/)
 include("reference/ed.jl")
 
@@ -58,7 +60,8 @@ export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_i
        site0_hamiltonian, check_symmetry, check_model_symmetry, wilson_chains, spin_symmetry, siam,
        resonant_level, kondo, two_orbital, kanamori, spin_ops, NRGParams, chain_length_for, Shell, NRGRun,
        run_nrg, shell, keptspace, discspace, krange, drange, nkept, ndisc, totalkept, totaldisc,
-       energy_scale, truncate_shell, dense_embedding, ProductEmbedding, xrange, EDResult, ed_reference,
-       ed_operator, ed_thermal_average, ed_psf, chain_modes, chain_allowed
+       energy_scale, truncate_shell, dense_embedding, ProductEmbedding, LocalOperator, local_operator,
+       shell_operator, refine, project, sector_view, xrange, EDResult, ed_reference, ed_operator,
+       ed_thermal_average, ed_psf, chain_modes, chain_allowed
 
 end # module
