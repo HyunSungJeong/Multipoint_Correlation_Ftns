@@ -7,3 +7,7 @@ Manifest.toml
 # 82 MB: all 16 Keldysh components of the 401x401 KF vertex, both spins.
 # Regenerated in seconds by the heat-map section of the atom notebook.
 notebooks/figures/heatmaps/p2_kf_vertex_full.jld2
+# mpNRG: paper PDFs and arXiv sources are never committed (task sheet, rule 4).
+mpNRG/refs/
+# mpNRG: intermediate per-PSF results of scripts/v8_benchmark.jl (collected into v8_results.jld2)
+mpNRG/notebooks/figures/mpnrg/v8_parts/
