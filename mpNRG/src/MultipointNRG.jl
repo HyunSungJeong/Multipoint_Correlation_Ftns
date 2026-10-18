@@ -27,9 +27,9 @@ using Printf
 using JLD2
 
 # symmetry layer
-include("symmetry/labels.jl")
-include("symmetry/blockop.jl")
-include("symmetry/fusion.jl")
+include("../../TNOps/src/symmetry.jl")
+include("../../TNOps/src/tensor.jl")
+include("../../TNOps/src/fusion.jl")
 # local Fock spaces and operator algebra
 include("fock/operators.jl")
 include("fock/fockspace.jl")
