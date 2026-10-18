@@ -9,6 +9,8 @@ const FILES = [
     "test_v1_symmetry.jl",
     # P2
     "test_v2_chain.jl",
+    # P3
+    "test_v3_spectra.jl",
 ]
 
 @testset "MultipointNRG" begin
