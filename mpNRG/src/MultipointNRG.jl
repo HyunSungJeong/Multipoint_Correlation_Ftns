@@ -45,8 +45,16 @@ include("nrg/sweep.jl")
 # operator projections, density matrix
 include("operators/projection.jl")
 include("fdm/fdm.jl")
+# partial spectral functions
+include("psf/grid.jl")
+include("psf/engine.jl")
+include("psf/api.jl")
+# per-shell hooks (hooks/) follow in P9
+_call_hooks(ctx, n, tasks) = isempty(ctx.hooks) || throw(ArgumentError("per-shell hooks are not available yet"))
 # observables and I/O
 include("observables/thermo.jl")
+include("observables/broadening.jl")
+include("io/io.jl")
 # reference ED (independent of nrg/)
 include("reference/ed.jl")
 
@@ -65,9 +73,12 @@ export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_i
        run_nrg, shell, keptspace, discspace, krange, drange, nkept, ndisc, totalkept, totaldisc,
        energy_scale, truncate_shell, dense_embedding, ProductEmbedding, LocalOperator, local_operator,
        shell_operator, refine, project, sector_view, xrange, FDM, fdm, weight, rhoD, rhoK, rho_full,
-       fdm_checks, thermal_average, shell_trace, thermal_average_product, bath_model, fdm_thermodynamics,
+       fdm_checks, thermal_average, shell_trace, thermal_average_product, LogGrid, nbins, zerobin, centres,
+       binindex, PSFResult, psf, psfs, psf_multilinear, add_psf, all_perms, histogram, nonzero_bins,
+       bin_exact, bin_terms, total_weight, npoint, bath_model, fdm_thermodynamics,
        impurity_thermodynamics_fdm, shell_thermodynamics, impurity_thermodynamics_shell, evenodd_average,
-       impurity_thermodynamics_zavg, EDResult, ed_reference, ed_operator, ed_thermal_average, ed_psf,
-       chain_modes, chain_allowed
+       impurity_thermodynamics_zavg, delta_SL, delta_F, broaden, git_commit, run_metadata, psf_dict,
+       save_results, load_results, zaverage, zaveraged_psfs, EDResult, ed_reference, ed_operator,
+       ed_thermal_average, ed_psf, chain_modes, chain_allowed
 
 end # module

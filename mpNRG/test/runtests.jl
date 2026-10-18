@@ -15,6 +15,9 @@ const FILES = [
     "test_v1_chain.jl", "test_v4_operators.jl",
     # P5
     "test_v3_thermal.jl", "test_v4_fdm.jl", "test_v7_thermo.jl",
+    # P6-P8
+    "test_v3_psf.jl", "test_v4_psf.jl", "test_v4e_dense.jl", "test_symmetry.jl", "test_v5_rlm.jl",
+    "test_v6_consistency.jl", "test_v7_spectral.jl", "test_hubbardatom.jl", "test_io.jl", "test_v8_external.jl",
 ]
 
 @testset "MultipointNRG" begin

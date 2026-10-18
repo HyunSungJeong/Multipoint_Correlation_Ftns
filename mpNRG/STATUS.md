@@ -12,3 +12,4 @@ Task sheet: [`docs/TASK.md`](docs/TASK.md). Work in progress; the verification r
 | P3 | `model/`, `nrg/`, `reference/` |
 | P4 | `operators/` |
 | P5 | `fdm/`, thermodynamics |
+| P6–P8 | `psf/` (one generic engine for ℓ = 2, 3, 4), `io/`, z-averaging, 2p broadening |
