@@ -18,6 +18,8 @@ const FILES = [
     # P6-P8
     "test_v3_psf.jl", "test_v4_psf.jl", "test_v4e_dense.jl", "test_symmetry.jl", "test_v5_rlm.jl",
     "test_v6_consistency.jl", "test_v7_spectral.jl", "test_hubbardatom.jl", "test_io.jl", "test_v8_external.jl",
+    # P9
+    "test_hooks_models.jl",
 ]
 
 @testset "MultipointNRG" begin

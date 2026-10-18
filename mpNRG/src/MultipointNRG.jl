@@ -49,8 +49,7 @@ include("fdm/fdm.jl")
 include("psf/grid.jl")
 include("psf/engine.jl")
 include("psf/api.jl")
-# per-shell hooks (hooks/) follow in P9
-_call_hooks(ctx, n, tasks) = isempty(ctx.hooks) || throw(ArgumentError("per-shell hooks are not available yet"))
+include("hooks/hooks.jl")
 # observables and I/O
 include("observables/thermo.jl")
 include("observables/broadening.jl")
@@ -58,27 +57,31 @@ include("io/io.jl")
 # reference ED (independent of nrg/)
 include("reference/ed.jl")
 
-export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_index, factornames, fuse,
-       dual, neutral, isneutral, parity, degeneracy, SectorSpace, sectors, dim, offsets, BlockOp, getblock,
-       setblock!, target, blockeigen, blocksvd, todense, identity_op, restrict, SlicedBlockOp, mapslices_op,
-       nslices, FusionPair, FusionMap, fusionmap, kron_op, Mode, Ladder, OpExpr, cdag, cop, num,
-       identity_expr, comm, acomm, normalorder, modes, maxsite, wordshift, components, opshift, FockBasis,
-       densematrix, statecharge, occupation, LocalSpace, localop, parity_op, localspace_sectors,
-       Hybridization, BoxHybridization, FunctionHybridization, TabulatedHybridization, integrate,
-       total_coupling, bandwidth, Discretization, interval_edges, StarBath, discretize, zitko_energies,
-       lanczos_chain, WilsonChain, wilson_chain, chain_star, star_moments, chain_moments, chainlength,
-       nsites, BathChannel, ImpurityModel, impurity_modes, site_modes, site_space, charges, hamiltonian_expr,
-       site0_hamiltonian, check_symmetry, check_model_symmetry, wilson_chains, spin_symmetry, siam,
-       resonant_level, kondo, two_orbital, kanamori, spin_ops, NRGParams, chain_length_for, Shell, NRGRun,
-       run_nrg, shell, keptspace, discspace, krange, drange, nkept, ndisc, totalkept, totaldisc,
-       energy_scale, truncate_shell, dense_embedding, ProductEmbedding, LocalOperator, local_operator,
-       shell_operator, refine, project, sector_view, xrange, FDM, fdm, weight, rhoD, rhoK, rho_full,
-       fdm_checks, thermal_average, shell_trace, thermal_average_product, LogGrid, nbins, zerobin, centres,
-       binindex, PSFResult, psf, psfs, psf_multilinear, add_psf, all_perms, histogram, nonzero_bins,
-       bin_exact, bin_terms, total_weight, npoint, bath_model, fdm_thermodynamics,
-       impurity_thermodynamics_fdm, shell_thermodynamics, impurity_thermodynamics_shell, evenodd_average,
-       impurity_thermodynamics_zavg, delta_SL, delta_F, broaden, git_commit, run_metadata, psf_dict,
-       save_results, load_results, zaverage, zaveraged_psfs, EDResult, ed_reference, ed_operator,
-       ed_thermal_average, ed_psf, chain_modes, chain_allowed
+export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_index, factornames,
+       fuse, dual, neutral, isneutral, parity, degeneracy,
+       SectorSpace, sectors, dim, offsets, BlockOp, getblock, setblock!, target, blockeigen, blocksvd,
+       todense, identity_op, restrict, SlicedBlockOp, mapslices_op, nslices,
+       FusionPair, FusionMap, fusionmap, kron_op,
+       Mode, Ladder, OpExpr, cdag, cop, num, identity_expr, comm, acomm, normalorder, modes, maxsite,
+       wordshift, components, opshift,
+       FockBasis, densematrix, statecharge, occupation, LocalSpace, localop, parity_op, localspace_sectors,
+       Hybridization, BoxHybridization, FunctionHybridization, TabulatedHybridization, integrate, total_coupling,
+       bandwidth, Discretization, interval_edges, StarBath, discretize, zitko_energies,
+       lanczos_chain, WilsonChain, wilson_chain, chain_star, star_moments, chain_moments, chainlength, nsites,
+       BathChannel, ImpurityModel, impurity_modes, site_modes, site_space, charges, hamiltonian_expr,
+       site0_hamiltonian, check_symmetry, check_model_symmetry, wilson_chains,
+       spin_symmetry, siam, resonant_level, kondo, two_orbital, kanamori, spin_ops,
+       NRGParams, chain_length_for, Shell, NRGRun, run_nrg, shell, keptspace, discspace, krange, drange,
+       nkept, ndisc, totalkept, totaldisc, energy_scale, truncate_shell, dense_embedding, ProductEmbedding,
+       LocalOperator, local_operator, shell_operator, refine, project, sector_view, xrange,
+       FDM, fdm, weight, rhoD, rhoK, rho_full, fdm_checks, thermal_average, shell_trace, thermal_average_product,
+       LogGrid, nbins, zerobin, centres, binindex, PSFResult, psf, psfs, psf_multilinear, add_psf, all_perms,
+       histogram, nonzero_bins, bin_exact, bin_terms, total_weight, npoint,
+       CarriedComposite, ShellContext, isometries, fusionmap, rhoKK, refinement_map, call_operators, carried,
+       on_shell, SingularValueRecorder,
+       bath_model, fdm_thermodynamics, impurity_thermodynamics_fdm, shell_thermodynamics,
+       impurity_thermodynamics_shell, evenodd_average, impurity_thermodynamics_zavg, delta_SL, delta_F, broaden,
+       git_commit, run_metadata, psf_dict, save_results, load_results, zaverage, zaveraged_psfs,
+       EDResult, ed_reference, ed_operator, ed_thermal_average, ed_psf, chain_modes, chain_allowed
 
 end # module

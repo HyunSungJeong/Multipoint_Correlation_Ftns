@@ -1,0 +1,12 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+HubbardAtom = "3f1a6d2e-9c7b-4e85-9a31-5d0c8f4b2a67"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MultipointNRG = "ddadee95-2439-4907-be83-7ee3b21654df"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[sources]
+HubbardAtom = {path = "../.."}
+MultipointNRG = {path = ".."}

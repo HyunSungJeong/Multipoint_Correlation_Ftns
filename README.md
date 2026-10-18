@@ -27,6 +27,7 @@ covers all three models.
 | Hubbard dimer | 16 | `notebooks/hubbard_dimer.ipynb` |
 | AIM, `N_b = 1, 2, 3` bath sites | 16, 64, 256 | `notebooks/aim.ipynb` |
 | PSF Lanczos: Liouvillian matrix elements of 3p PSFs (all three models, random `D = 6`) | 4–64 | `notebooks/psf_lanczos.ipynb` |
+| mpNRG: separate package `MultipointNRG` (fdm-NRG for 2p/3p/4p PSFs, [`mpNRG/`](mpNRG/README.md)) | Wilson chains, `N_keep` ≤ 800 | `mpNRG/notebooks/mpnrg_validation.ipynb` |
 
 ## Status
 
@@ -120,6 +121,25 @@ Krylov dimensions (R′, R): 31 (F1, = D(D-1)+1), 32 (F1b), 2 (F2), 8 (F3), 8 / 
 | `psf_lanczos_task.md` | L10 | 3p support ⊆ 2p supports; `s̃ = B′†KB` | 0 outside; ≤ 6e-16 |
 | `psf_lanczos_task.md` | L11 | uniform `W₃`: PSF reproduced, chain not Liouvillian | ≤ 6e-16; ≥ 0.21 (fails, as required) |
 | `psf_lanczos_task.md` | L12 | atom at `β|U|` up to 700 | observation, see Findings |
+
+### mpNRG
+
+A separate Julia package, `MultipointNRG` in [`mpNRG/`](mpNRG/README.md): full-density-matrix NRG for local 2p, 3p
+and 4p PSFs following Lee, Kugler & von Delft, [PRX **11**, 041007 (2021)](https://doi.org/10.1103/PhysRevX.11.041007),
+with the PSF convention of Eq. (28) here. Its `src/` does not depend on `HubbardAtom`; the tests use `HubbardAtom` as an
+independent reference, and PSFs export to its kernels. Verification record, deviations and open issues:
+[`mpNRG/STATUS.md`](mpNRG/STATUS.md). Tests: `julia --project=mpNRG/test mpNRG/test/runtests.jl` (2897 assertions).
+
+| Sheet | Item | Check | Accuracy |
+|:--|:--|:--|:--|
+| `mpNRG/docs/TASK.md` | V1 | block algebra, fusion, fermionic signs (R1, R2) vs an independent Kronecker Jordan–Wigner | ≤ 7e-14 |
+| `mpNRG/docs/TASK.md` | V2 | discretization sum rule, Žitko–Pruschke ODE vs closed form, BigFloat chain moments, two precisions | 0; 1.3e-13; 1.5e-154; 7e-77 |
+| `mpNRG/docs/TASK.md` | V3 | no truncation: spectra, `Z`, thermal averages, 2p/3p/4p PSFs vs ED and vs `HubbardAtom` | ≤ 5e-14 |
+| `mpNRG/docs/TASK.md` | V4 | with truncation: `Σ w = Tr[ϱ O¹⋯Oˡ]`, operator expansion, FDM, decoupled tail exact, dense brute force of Lee's recursion | ≤ 1e-13 |
+| `mpNRG/docs/TASK.md` | V5 | resonant level: per-decade weights vs exact discrete model; broadened vs continuum (`n_z = 4`) | 7e-7; 10–13 % |
+| `mpNRG/docs/TASK.md` | V6 | trace forms (totals; per decade), schedules, z-independence, convergence in `N_keep` | 1e-15; ≤ 1.7 %; 4e-18; 5e-15; monotone to 2e-15 |
+| `mpNRG/docs/TASK.md` | V7 | SIAM: entropy ln 4 → ln 2 → 0, `⟨n_d⟩ = 1`, Friedel plateau | 1.381, 0.683, 1e-5; 1e-15; 0.995 |
+| `mpNRG/docs/TASK.md` | V8 | LMU Open Data 613 (Frankenbach et al.): 2p totals; 2p bins after the dataset's binning; connected 4p totals (48); 4p marginals | 7e-6; 7–15 %; 0.4 %; 11 % (= the 2p difference) |
 
 ## Findings
 
@@ -294,6 +314,7 @@ notebooks/psf_lanczos.ipynb, .pdf
 notebooks/figures/heatmaps/   atom P1-P5 (PNG, PDF, .jld2)
 notebooks/figures/aim/        AIM O2, O3 (PNG, PDF, .jld2)
 notebooks/figures/psf_lanczos/  PSF Lanczos P1-P6 (PNG, PDF, .jld2)
+mpNRG/                  separate package MultipointNRG (layout in mpNRG/README.md)
 ```
 
 ## Reproducibility
