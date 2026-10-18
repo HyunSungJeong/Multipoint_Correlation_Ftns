@@ -7,3 +7,4 @@ Task sheet: [`docs/TASK.md`](docs/TASK.md). Work in progress; the verification r
 | Phase | Content |
 |:--|:--|
 | P0 | skeleton, Project.toml, test env (HubbardAtom path source), conventions |
+| P1 | `symmetry/`, `fock/` |
