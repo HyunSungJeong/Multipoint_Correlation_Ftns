@@ -7,6 +7,8 @@ include(joinpath(TESTDIR, "helpers.jl"))
 const FILES = [
     # P1
     "test_v1_symmetry.jl",
+    # P2
+    "test_v2_chain.jl",
 ]
 
 @testset "MultipointNRG" begin

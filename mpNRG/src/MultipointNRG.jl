@@ -33,12 +33,20 @@ include("symmetry/fusion.jl")
 # local Fock spaces and operator algebra
 include("fock/operators.jl")
 include("fock/fockspace.jl")
+# bath, discretization, Wilson chain
+include("bath/hybridization.jl")
+include("bath/discretization.jl")
+include("bath/chain.jl")
 
 export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_index, factornames, fuse,
        dual, neutral, isneutral, parity, degeneracy, SectorSpace, sectors, dim, offsets, BlockOp, getblock,
        setblock!, target, blockeigen, blocksvd, todense, identity_op, restrict, SlicedBlockOp, mapslices_op,
        nslices, FusionPair, FusionMap, fusionmap, kron_op, Mode, Ladder, OpExpr, cdag, cop, num,
        identity_expr, comm, acomm, normalorder, modes, maxsite, wordshift, components, opshift, FockBasis,
-       densematrix, statecharge, occupation, LocalSpace, localop, parity_op, localspace_sectors
+       densematrix, statecharge, occupation, LocalSpace, localop, parity_op, localspace_sectors,
+       Hybridization, BoxHybridization, FunctionHybridization, TabulatedHybridization, integrate,
+       total_coupling, bandwidth, Discretization, interval_edges, StarBath, discretize, zitko_energies,
+       lanczos_chain, WilsonChain, wilson_chain, chain_star, star_moments, chain_moments, chainlength,
+       nsites
 
 end # module
