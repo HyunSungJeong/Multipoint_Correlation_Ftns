@@ -44,6 +44,9 @@ include("model/builtin.jl")
 include("nrg/sweep.jl")
 # operator projections, density matrix
 include("operators/projection.jl")
+include("fdm/fdm.jl")
+# observables and I/O
+include("observables/thermo.jl")
 # reference ED (independent of nrg/)
 include("reference/ed.jl")
 
@@ -61,7 +64,10 @@ export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_i
        resonant_level, kondo, two_orbital, kanamori, spin_ops, NRGParams, chain_length_for, Shell, NRGRun,
        run_nrg, shell, keptspace, discspace, krange, drange, nkept, ndisc, totalkept, totaldisc,
        energy_scale, truncate_shell, dense_embedding, ProductEmbedding, LocalOperator, local_operator,
-       shell_operator, refine, project, sector_view, xrange, EDResult, ed_reference, ed_operator,
-       ed_thermal_average, ed_psf, chain_modes, chain_allowed
+       shell_operator, refine, project, sector_view, xrange, FDM, fdm, weight, rhoD, rhoK, rho_full,
+       fdm_checks, thermal_average, shell_trace, thermal_average_product, bath_model, fdm_thermodynamics,
+       impurity_thermodynamics_fdm, shell_thermodynamics, impurity_thermodynamics_shell, evenodd_average,
+       impurity_thermodynamics_zavg, EDResult, ed_reference, ed_operator, ed_thermal_average, ed_psf,
+       chain_modes, chain_allowed
 
 end # module

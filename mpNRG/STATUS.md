@@ -11,3 +11,4 @@ Task sheet: [`docs/TASK.md`](docs/TASK.md). Work in progress; the verification r
 | P2 | `bath/` |
 | P3 | `model/`, `nrg/`, `reference/` |
 | P4 | `operators/` |
+| P5 | `fdm/`, thermodynamics |
