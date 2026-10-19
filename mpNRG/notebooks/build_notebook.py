@@ -89,10 +89,11 @@ ms = chain_modes(n -> site_modes(m, n), N); c = jw_annihilators(length(ms)); idx
 emb = dense_embedding(run, N); sh = shell(run, N)
 err_ops = 0.0; err_ac = 0.0
 ops = Dict(md => project(run, cop(md), N) for md in ms)
-for md in ms, (q, M) in ops[md].blocks
-    global err_ops = max(err_ops, norm(emb.cols[target(ops[md], q)]' * c[idx(md)] * emb.cols[q] - M))
+for md in ms, q in sectors(sh.space)
+    r = target(ops[md], q); haskey(sh.space, r) || continue
+    global err_ops = max(err_ops, norm(emb.cols[r]' * c[idx(md)] * emb.cols[q] - getblock(ops[md], q)))
 end
-Id = todense(identity_op(sh.space))
+Id = todense(identity_op(sh.leg))
 for a in ms, b in ms
     X = todense(ops[a] * ops[b]' + ops[b]' * ops[a]); Y = todense(ops[a] * ops[b] + ops[b] * ops[a])
     global err_ac = max(err_ac, norm(X - (a == b ? Id : 0Id)), norm(Y))

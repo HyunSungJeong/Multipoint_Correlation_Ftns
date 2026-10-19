@@ -22,7 +22,7 @@ function randleg(rng, G, gen; nsec = rand(rng, 2:5), dmax = 3, arrow = rand(rng,
         tries += 1
         push!(secs, LegSector(sector(G, gen(rng)), tagged ? rand(rng, 0:2) : 0))
     end
-    secs = collect(secs)
+    secs = sort!(collect(secs))         # independent of hash order
     return Leg(LegSector{labeltype(G)}[s for s in secs], [rand(rng, 1:dmax) for _ in secs]; arrow = arrow)
 end
 

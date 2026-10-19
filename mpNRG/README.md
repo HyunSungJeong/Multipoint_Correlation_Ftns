@@ -14,8 +14,9 @@ with the PSF convention of Kugler, Lee & von Delft,
 which is the convention of the repository's `HubbardAtom` package.
 
 The package is independent of `HubbardAtom` (its `src/` uses only `LinearAlgebra`,
-`Printf` and `JLD2`); the tests use `HubbardAtom` as an independent reference, and
-PSFs can be exported to its Matsubara and Keldysh kernels.
+`Printf`, `JLD2` and the sibling package [`TNOps`](../TNOps), the abelian
+block-sparse tensor layer); the tests use `HubbardAtom` as an independent
+reference, and PSFs can be exported to its Matsubara and Keldysh kernels.
 
 The verification record (every validation item, with achieved accuracies) is in
 [`STATUS.md`](STATUS.md); the executed validation notebook is
@@ -134,7 +135,8 @@ G = HA.correlator(model, ops_dense, matsubara_freqs; cache = cache)   # HubbardA
 ## Layout
 
 ```
-src/symmetry/   abelian labels (U1, Z_n, parity), SectorSpace, BlockOp, SlicedBlockOp, fusion maps
+../TNOps/       (sibling package) abelian labels, legs, BlockTensor, SlicedTensor, fusion, factorizations
+src/nrg/tensors.jl  the named NRG contractions on TNOps tensors (the only tensor operations of mpNRG)
 src/fock/       modes, symbolic operator algebra, Jordan-Wigner dense matrices, local spaces
 src/bath/       hybridizations, logarithmic discretization, BigFloat Lanczos, star of a finite chain
 src/model/      ImpurityModel, symmetry checks, built-in models
@@ -147,3 +149,61 @@ src/io/         JLD2 output with full metadata, z-averaging
 src/hooks/      per-shell callback interface
 src/reference/  dense ED of finite Wilson chains (independent of nrg/)
 ```
+
+## Changes in the TNOps refactor
+
+The abelian block-sparse layer moved out of `src/symmetry/` into the sibling
+package `TNOps` (rank-k tensors with tagged, oriented legs; see
+[`../TNOps/README.md`](../TNOps/README.md)), and every tensor operation of
+`mpNRG` goes through the named functions of `src/nrg/tensors.jl` (refactor
+sheet [`docs/TNOPS_REFACTOR.md`](docs/TNOPS_REFACTOR.md)). Results are
+unchanged up to round-off (regression baseline `test/baseline/`, notebook
+section "Refactor regression (TNOps)"). For code that uses the package:
+
+- **Re-exported names keep working.** `SectorSpace(Dict(q => d))` builds an
+  untagged `Leg` (`SectorSpace === Leg`); `BlockOp{T,S}` is an alias of
+  `BlockTensor{T,2,S}` and `BlockOp{T}(row, col, Δ)` still constructs an
+  empty operator; `A.shift`, `A.row`, `A.col`, `target(A, q)`,
+  `getblock(A, q)` / `setblock!(A, q, M)` (keyed by column label), `todense`,
+  `*`, `+`, `'`, `tr`, `norm`, `restrict` behave as before;
+  `SlicedBlockOp{T,S,Kt}` is an alias of `SlicedTensor{Kt,T,2,S}` and
+  `mapslices_op(f, A) = mapslices(f, A)`; `blockeigen`, `blocksvd`,
+  `identity_op` and `kron_op` are thin wrappers (of `eigen`/`svd` per label,
+  `identity_tensor`, `kron_fused`); `FusionMap`, `FusionPair`, `fusionmap`
+  are the generic two-leg fusion of TNOps with the same layout (outer leg
+  slow, inner fast).
+- **Block dictionaries are keyed by tagged sectors.** `A.blocks` is now a
+  `Dict` from tuples of `LegSector`s to arrays; code that indexed
+  `A.blocks[q]` by label must use `getblock(A, q)` (all tags of the label,
+  kept states first) or iterate `eachblock(A)`.
+- **Shells.** `Shell.A` is the isometry `A^n` as a rank-3 `BlockTensor` with
+  legs (old: the kept leg of shell `n-1`, site: the local leg, new: the shell
+  leg), rank 2 at `n = -1`; `Shell.Adag` is its adjoint and `Shell.leg` the
+  shell leg, on which every label `q` carries the tagged sectors `(q, K)`
+  (tag 1, `nkept` states) and `(q, D)` (tag 2). `Shell.F` holds rank-2
+  tensors on `Shell.leg`; `Shell.fusion` is a TNOps `FusionMap` (`.loc`/`.outer`
+  the site leg, `.prev`/`.inner` the kept leg, `.out` the product leg;
+  `pairs` keyed by `LegSector`, with `p.σ`, `p.q` now `LegSector`s). `shell`, `keptspace`, `discspace`, `krange`, `drange`, `xrange`,
+  `nkept`, `ndisc` and `sector_view` keep their signatures and meanings;
+  `Shell.space` is an untagged leg with the dimensions of the old
+  `SectorSpace`.
+- **Operators.** `shell_operator`, `refine` and `project` return rank-2
+  tensors on the shell leg (`refine` also accepts a `SlicedTensor` and acts
+  slice by slice); `sector_view(run, O, n, q, X, X̄)` is
+  `block_view(O, q, X, X̄)`, the stored tagged block or `nothing`.
+- **FDM.** `rhoK(f, n)` is a tensor on the kept leg of shell `n` (it was a
+  `Dict` of matrices); `getblock(rhoK(f, n), q)` gives the old matrix.
+  `rhoD`, `weight`, `rho_full(f, run, n, q)` are unchanged.
+- **Hooks.** `isometries(ctx)` returns the rank-3 isometry, `rhoKK(ctx)` the
+  kept-leg tensor, `call_operators(ctx)` rank-2 tensors, `carried(ctx)`
+  composites whose `slices` are `SlicedTensor`s; `fusionmap(ctx)` and
+  `refinement_map(ctx)` keep their roles (memory layout: the docstring of
+  `ShellContext`).
+- **Determinism.** `Mode`, `Ladder`, `Sector`, `LegSector` and `Arrow` have
+  content hashes, so dictionary orders, and with them summation orders and
+  round-off, no longer change between builds (findings R5c and R6 in
+  `STATUS.md`). `TNOps.eigen` uses LAPACK's divide-and-conquer driver
+  (finding R5b).
+- **Output files** of `save_results` are unchanged; files written by the
+  pre-refactor code load as before (`test/test_io.jl`).
+

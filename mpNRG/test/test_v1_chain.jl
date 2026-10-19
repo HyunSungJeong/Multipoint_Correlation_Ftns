@@ -1,7 +1,7 @@
 # V1 (chain parts) and Sec. 5.2.10: fusion and fermionic signs through the shell
 # construction, symmetry-violation errors, truncation across blocks.
 
-using Test, MultipointNRG, TNOps, LinearAlgebra
+using Test, MultipointNRG, LinearAlgebra
 
 @testset "V1d fusion and signs: three Wilson sites vs dense Jordan-Wigner" begin
     m = siam(U = 0.6, εd = -0.25, Δ = 0.1)
@@ -51,7 +51,7 @@ using Test, MultipointNRG, TNOps, LinearAlgebra
         @test all(norm(getblock(sh.F[ν], q) - getblock(ops[Mode(N, σ)], q)) ≤ 1e-12 for q in sectors(sh.space))
     end
     # canonical anticommutators in the shell basis (block-tensor algebra)
-    Id = identity_tensor(sh.leg)
+    Id = identity_op(sh.leg)
     for a in ms, b in ms
         A = ops[a]; B = ops[b]
         X = A * B' + B' * A

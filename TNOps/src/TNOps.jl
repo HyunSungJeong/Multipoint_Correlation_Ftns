@@ -24,7 +24,7 @@ include("factorize.jl")
 include("parity.jl")
 include("ncon.jl")
 include("interface.jl")
-include("legacy.jl")
+include("compat.jl")
 
 export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_index, factornames,
        fuse, dual, neutral, isneutral, parity, degeneracy
@@ -36,8 +36,7 @@ export Arrow, In, Out, arrow, LegSector, Leg, legsectors, sectors, dim, offsets,
        permute, contract, outer, todense, fromdense, keyflux,
        FusionPair, FusionMap, fusionmap, kron_fused, fuse_legs, split_legs,
        global_cut, parity_tensor, apply_parity, ncon, SYMMETRY_INTERFACE
-# legacy rank-2 layer (until MultipointNRG is ported)
-export SectorSpace, BlockOp, blockeigen, blocksvd, identity_op, SlicedBlockOp, mapslices_op,
-       OldFusionPair, OldFusionMap, kron_op
+# names of the pre-refactor rank-2 layer (aliases and thin wrappers, compat.jl)
+export SectorSpace, BlockOp, blockeigen, blocksvd, identity_op, SlicedBlockOp, mapslices_op, kron_op
 
 end # module

@@ -15,6 +15,7 @@
 column leg).
 """
 @enum Arrow::Int8 In = 0 Out = 1
+Base.hash(a::Arrow, h::UInt) = hash(Int8(a), hash(:Arrow, h))       # content hash (see Sector)
 
 flip(a::Arrow) = a == In ? Out : In
 
@@ -34,6 +35,7 @@ LegSector(q::Sector) = LegSector(q, 0)
 label(s::LegSector) = s.label
 tag(s::LegSector) = s.tag
 Base.isless(a::LegSector{S}, b::LegSector{S}) where {S} = isless((a.label, a.tag), (b.label, b.tag))
+Base.hash(s::LegSector, h::UInt) = hash(s.tag, hash(s.label, hash(:LegSector, h)))   # content hash (see Sector)
 Base.show(io::IO, s::LegSector) = s.tag == 0 ? print(io, s.label) : print(io, s.label, "#", s.tag)
 
 """
@@ -67,6 +69,8 @@ end
 Leg(secs::AbstractVector{LegSector{S}}, dims::AbstractVector{<:Integer}; arrow::Arrow = Out,
     name::Symbol = Symbol("")) where {S} = Leg{S}(collect(secs), collect(Int, dims), arrow, name)
 Leg(d::AbstractDict{LegSector{S},<:Integer}; kwargs...) where {S} = Leg(collect(keys(d)), collect(values(d)); kwargs...)
+Leg(labels::AbstractVector{S}, dims::AbstractVector{<:Integer}; tag::Integer = 0, kwargs...) where {S<:Sector} =
+    Leg([LegSector(q, Int(tag)) for q in labels], dims; kwargs...)
 Leg(d::AbstractDict{S,<:Integer}; tag::Integer = 0, kwargs...) where {S<:Sector} =
     Leg([LegSector(q, Int(tag)) for q in keys(d)], collect(values(d)); kwargs...)
 
@@ -84,6 +88,9 @@ Base.eltype(::Type{Leg{S}}) where {S} = LegSector{S}
 """    dim(l, s::LegSector) / dim(l, q) — dimension of a sector, or of all sectors with label `q`."""
 dim(l::Leg{S}, s::LegSector{S}) where {S} = (i = get(l.index, s, 0); i == 0 ? 0 : l.dims[i])
 function dim(l::Leg{S}, q::S) where {S}
+    # fast path: (q, 0) is the first sector of its label (sorted by (label, tag))
+    i = get(l.index, LegSector(q, 0), 0)
+    i > 0 && (i == length(l.sectors) || l.sectors[i + 1].label != q) && return l.dims[i]
     d = 0
     for (s, n) in zip(l.sectors, l.dims)
         s.label == q && (d += n)

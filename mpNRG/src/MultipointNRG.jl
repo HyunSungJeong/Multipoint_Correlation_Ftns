@@ -62,6 +62,7 @@ export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_i
        SectorSpace, sectors, dim, offsets, BlockOp, getblock, setblock!, target, blockeigen, blocksvd,
        todense, identity_op, restrict, SlicedBlockOp, mapslices_op, nslices,
        FusionPair, FusionMap, fusionmap, kron_op,
+       LegSector, Leg, BlockTensor, SlicedTensor, identity_tensor, eachblock, blockkeys, block_view,
        Mode, Ladder, OpExpr, cdag, cop, num, identity_expr, comm, acomm, normalorder, modes, maxsite,
        wordshift, components, opshift,
        FockBasis, densematrix, statecharge, occupation, LocalSpace, localop, parity_op, localspace_sectors,
