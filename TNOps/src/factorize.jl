@@ -6,6 +6,14 @@
 # operator form: row legs `Out`, column legs `In` (use `dual` / `permute`
 # otherwise); the new bond legs are then `In` on the left factor.
 
+# Dense hermitian eigensolver of every block: LAPACK divide and conquer
+# (syevd). The default driver, MRRR (syevr), returned eigenvectors that are
+# orthonormal only to 1.6e-13 for a well-separated 24×24 block of an NRG
+# shell (5e-15 with syevd and with QR iteration); see STATUS.md.
+const _DC_KW = Base.hasmethod(eigen, Tuple{Hermitian{Float64,Matrix{Float64}}}, (:alg,)) &&
+               isdefined(LinearAlgebra, :DivideAndConquer)
+_heigen(H::Hermitian) = _DC_KW ? eigen(H; alg = LinearAlgebra.DivideAndConquer()) : eigen(H)
+
 function _check_operator_form(A::BlockTensor{T,2}, what) where {T}
     arrow(leg(A, 1)) == Out && arrow(leg(A, 2)) == In ||
         throw(ArgumentError("$what needs operator form: row legs Out, column legs In (got $(arrow(leg(A, 1))), $(arrow(leg(A, 2))))"))
@@ -49,7 +57,8 @@ spectra); `U` has the row legs and a new bond leg (`In`, one untagged sector
 per row label, with the number of eigenvalues as dimension), so that
 `H = U Λ U†`. All tags of a label are diagonalized together (a neutral tensor
 couples them); each label block is symmetrized as `(M + M')/2` before the
-dense `eigen`, and labels are diagonalized in parallel over threads. Labels
+dense `eigen` (LAPACK divide and conquer), and labels are diagonalized in
+parallel over threads. Labels
 without a stored block have all eigenvalues zero.
 """
 function LinearAlgebra.eigen(H::BlockTensor{T,2,S}) where {T,S}
@@ -62,7 +71,7 @@ function LinearAlgebra.eigen(H::BlockTensor{T,2,S}) where {T,S}
     vecs = Vector{Matrix{T}}(undef, length(qs))
     Threads.@threads for i in eachindex(qs)
         M = getblock(H, qs[i])
-        F = eigen(Hermitian((M + M') / 2))
+        F = _heigen(Hermitian((M + M') / 2))
         vals[i] = F.values; vecs[i] = F.vectors
     end
     bs = [LegSector(q) for q in qs]

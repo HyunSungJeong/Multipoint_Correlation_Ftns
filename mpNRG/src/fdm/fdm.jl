@@ -83,10 +83,10 @@ function fdm(run::NRGRun{S,Tm}; T::Real) where {S,Tm}
     rK = [Dict{S,Matrix{Tm}}() for _ in shells]
     for n in (N - 1):-1:-1
         sh1 = shell(run, n + 1); sh = shell(run, n)
-        Fu = sh1.fusion
+        Fu = legacy_fusion(sh1)       # temporary (R5b): pre-refactor layout
         acc = Dict{S,Matrix{Tm}}(q => zeros(Tm, nkept(sh, q), nkept(sh, q)) for q in sectors(sh.space) if nkept(sh, q) > 0)
         for (qq, prs) in Fu.pairs
-            A = sh1.A[qq]
+            A = legacy_A(sh1)[qq]
             kq = nkept(sh1, qq)
             ρfull = zeros(Tm, size(A, 2), size(A, 2))
             kq > 0 && (ρfull[1:kq, 1:kq] .= rK[n + 3][qq])

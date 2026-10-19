@@ -68,6 +68,15 @@ literals (TNOps has no JLD2).
    `kron_op` live unchanged in `src/legacy.jl`; the old `FusionMap` /
    `FusionPair` are renamed `OldFusionMap` / `OldFusionPair` there so that the
    generic fusion takes the names. `legacy.jl` is removed in R6.
+6. **`eigen` uses the divide-and-conquer driver** (`LAPACK.syevd!`, through
+   `eigen(H; alg = LinearAlgebra.DivideAndConquer())` where available), not
+   Julia's default MRRR driver (`syevr`). Found in R5b: the eigenvectors MRRR
+   returned for one 24×24 shell block of the V1d chain test were orthonormal
+   only to ‖V'V − 1‖ = 1.6e-13, above the test's 1e-13 (the pre-refactor
+   code, which happened to call the same driver on a differently assembled but
+   equal matrix, gave 2.7e-14). QR (`syev`) and divide-and-conquer give
+   ~5e-15 on the same matrix; with divide-and-conquer the largest deviation
+   over the test is 1.1e-14. No tolerance was changed.
 
 ## Phase log and pushes
 
@@ -80,3 +89,5 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R1 | `TNOps/` package: `git mv` of the symmetry layer, module wrapper, tests V1a/V1b | `9fb953612984b11a392d8d1d41ca3dcfd359d232` |
 | R2 | legs, `BlockTensor`, `SlicedTensor`, arithmetic, `permute`, `contract`, `tr`, `outer`, `dense.jl` | `268d6cae63cb9749a13945816b499c2c65474966` |
 | R3 | fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook | `1c38847989e9c787cd271af8c4d208b8f36ef528` |
+| R4 | mpNRG `nrg/tensors.jl` (named NRG contractions) and `test_nrg_tensors.jl`; TNOps `retag` | `6c119a66ca55633d370ab6f687a9827c56c78618` |
+| R5a | mpNRG `fock/`, `reference/` build TNOps tensors | `02f2d104f0a76faf20bed48646c77c6182cc3561` |

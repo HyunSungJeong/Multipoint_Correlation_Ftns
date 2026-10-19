@@ -113,6 +113,21 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R2 | TNOps: legs, `BlockTensor`, `SlicedTensor`, contractions, dense maps (mpNRG unchanged, still on the legacy layer) | `268d6ca` |
 | R3 | TNOps: fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook; mpNRG refers to the legacy fusion type as `OldFusionMap` | `1c38847` |
 | R4 | `nrg/tensors.jl`: the named NRG contractions on TNOps tensors (`fuse_site`, `product_hamiltonian`, `diagonalize_shell`, `rotate`, `lift_site`, `refine_KK`, `backward_step`, `shell_trace`, `block_view`, …) with `test_nrg_tensors.jl` (frozen fixtures to 1e-13; dense JW reference, 3 interacting spinful sites); not yet used by the sweep | see `TNOps/STATUS.md` |
+| R5a | `fock/` (`localop`, `parity_op` are tensors on the site leg) and `reference/ed.jl` (ED operators as tensors; ED PSFs and averages stay dense) | `02f2d10` |
+| R5b | forward sweep on TNOps tensors: rank-3 `A^n` with K/D-tagged legs, `diagonalize_shell`, `global_cut` truncation, `lift_site` for `F`; temporary pre-refactor views for `operators/` and `fdm/`; TNOps `eigen` on the divide-and-conquer driver (finding below) | see `TNOps/STATUS.md` |
+
+**Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
+With the sweep on TNOps tensors, V1d failed one assertion: the shell-2
+eigenvectors of one 24×24 block were orthonormal only to 1.6e-13 (> 1e-13;
+2.7e-14 before). The block Hamiltonian agrees with the pre-refactor one to
+rounding; the deviation is that of LAPACK's MRRR driver (`syevr`, Julia's
+default for `Hermitian` matrices) on this matrix, while QR and
+divide-and-conquer give ~5e-15. TNOps `eigen` now uses divide-and-conquer
+(`TNOps/STATUS.md`, design decision 6); V1d then gives 1.1e-14, the suite
+passes (1946 assertions) and every baseline row passes (largest deviations:
+energies 1.0e-14, ln Z 3.7e-13, thermodynamics 3.9e-13, PSF totals 1.8e-13 of
+the largest weight; kept counts identical, no bin flips). No tolerance,
+sign or reference changed.
 
 ## Phase log
 

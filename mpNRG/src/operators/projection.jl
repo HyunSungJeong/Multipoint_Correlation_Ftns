@@ -81,7 +81,8 @@ given on the full space of shell `n-1` or on its kept space.
 """
 function refine(run::NRGRun{S,T}, O::BlockOp{TO,S}, n::Integer) where {S,T,TO}
     sh = shell(run, n); prev = shell(run, n - 1)
-    Fu = sh.fusion
+    Fu = legacy_fusion(sh)        # temporary (R5b): pre-refactor layout
+    Al = legacy_A(sh)
     Tt = promote_type(T, TO)
     Δ = O.shift
     p = parity(Δ)
@@ -90,7 +91,7 @@ function refine(run::NRGRun{S,T}, O::BlockOp{TO,S}, n::Integer) where {S,T,TO}
     for (qin, prs) in Fu.pairs
         qout = fuse(qin, Δ)
         haskey(Fu.pairs, qout) || continue
-        Ain = sh.A[qin]
+        Ain = Al[qin]
         Tm = nothing
         for pr in prs
             Ob = get(O.blocks, pr.q, nothing)
@@ -111,7 +112,7 @@ function refine(run::NRGRun{S,T}, O::BlockOp{TO,S}, n::Integer) where {S,T,TO}
             end
         end
         Tm === nothing && continue
-        R.blocks[qin] = sh.A[qout]' * Tm
+        R.blocks[qin] = Al[qout]' * Tm
     end
     return R
 end
