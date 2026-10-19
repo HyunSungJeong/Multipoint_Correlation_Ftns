@@ -202,7 +202,7 @@ end
 # current matrices of a carried operator at shell n
 function _advance!(ctx::EngineCtx, op::EOp, n::Int)
     if op.expr !== nothing
-        M = project(ctx.run, op.expr, n)
+        M = to_legacy(project(ctx.run, op.expr, n), shell(ctx.run, n))      # temporary bridge (R5c)
         k = first(keys(op.slices))
         op.slices = Dict(k => M)
     else

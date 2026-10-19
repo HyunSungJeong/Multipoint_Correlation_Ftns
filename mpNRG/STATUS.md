@@ -115,6 +115,7 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R4 | `nrg/tensors.jl`: the named NRG contractions on TNOps tensors (`fuse_site`, `product_hamiltonian`, `diagonalize_shell`, `rotate`, `lift_site`, `refine_KK`, `backward_step`, `shell_trace`, `block_view`, …) with `test_nrg_tensors.jl` (frozen fixtures to 1e-13; dense JW reference, 3 interacting spinful sites); not yet used by the sweep | see `TNOps/STATUS.md` |
 | R5a | `fock/` (`localop`, `parity_op` are tensors on the site leg) and `reference/ed.jl` (ED operators as tensors; ED PSFs and averages stay dense) | `02f2d10` |
 | R5b | forward sweep on TNOps tensors: rank-3 `A^n` with K/D-tagged legs, `diagonalize_shell`, `global_cut` truncation, `lift_site` for `F`; temporary pre-refactor views for `operators/` and `fdm/`; TNOps `eigen` on the divide-and-conquer driver (finding below) | see `TNOps/STATUS.md` |
+| R5c | `operators/`: `shell_operator`, `refine` (= `refine_KK` with the shell isometry), `project` return TNOps tensors, `sector_view` = `block_view`; content hashes for `Mode`/`Ladder` (finding below); the PSF engine still on the pre-refactor operators through a temporary bridge `psf/legacy_bridge.jl` | see `TNOps/STATUS.md` |
 
 **Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
 With the sweep on TNOps tensors, V1d failed one assertion: the shell-2
@@ -128,6 +129,38 @@ passes (1946 assertions) and every baseline row passes (largest deviations:
 energies 1.0e-14, ln Z 3.7e-13, thermodynamics 3.9e-13, PSF totals 1.8e-13 of
 the largest weight; kept counts identical, no bin flips). No tolerance,
 sign or reference changed.
+
+**Finding (R5c): the operator algebra summed its terms in a build-dependent
+order.** The first R5c run failed one baseline row: PSF totals 1.5e-12 of
+the largest bin (> 1e-12; R5b 1.8e-13), in the `trunc` case 4p calls only
+(4p/2314, 3241, 4132, 1423). Analysis (no tolerance, sign or reference
+changed):
+
+1. Both runs satisfy their own exact sum rule `Σ w = ⟨O¹O²O³O⁴⟩`
+   (`thermal_average`, an independent path) to ≤ 1.6e-13 of the largest bin;
+   what moved between R5b and R5c is the sum rule itself, by 4e-14 relative,
+   and with it every thermal average of the case.
+2. The R5b and R5c builds give energies that differ by up to 1.6e-15 from
+   shell 0 on, although the sweep code is identical and each build is
+   bit-reproducible across processes. The divergence starts in the dense
+   shell-0 Hamiltonian (`densematrix` of the site-0 `OpExpr`).
+3. Cause: `OpExpr.terms` is a `Dict` keyed by words of `Ladder(Mode(site,
+   name::Symbol), dag)`. The default hash of these structs depends on the
+   memory address of the `Symbol` field: `hash(Mode(0, :up))` differs
+   between the R5b and R5c builds (while `hash(:up)` does not), so the terms,
+   and the round-off of their sum, come in a different order whenever
+   unrelated code is added. β = 1/T = 1000 in the `trunc` case and the
+   cancellations of the 4p sums (Σ|w| up to 44× the largest bin) amplify the
+   1e-16 differences to 1e-12 of a bin. This is a property of the
+   pre-refactor code, not of the tensor layer.
+4. Fix (in R5c): content hashes for `Mode` and `Ladder`
+   (`fock/operators.jl`); the term order is then the same in every build.
+   With it, R5c and R5b (both with the fix) give identical energies, ln Z
+   and thermodynamics and PSF totals within 3.1e-14 of the largest bin (the
+   tensor port itself); the pre-refactor code with the fix reproduces the
+   stored baseline (all rows pass, PSF totals 3.1e-13), so the stored
+   baseline is kept; R5c with the fix passes it with R5b's margins (PSF
+   totals 1.8e-13).
 
 ## Phase log
 

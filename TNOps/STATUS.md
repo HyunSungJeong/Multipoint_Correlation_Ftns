@@ -91,3 +91,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R3 | fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook | `1c38847989e9c787cd271af8c4d208b8f36ef528` |
 | R4 | mpNRG `nrg/tensors.jl` (named NRG contractions) and `test_nrg_tensors.jl`; TNOps `retag` | `6c119a66ca55633d370ab6f687a9827c56c78618` |
 | R5a | mpNRG `fock/`, `reference/` build TNOps tensors | `02f2d104f0a76faf20bed48646c77c6182cc3561` |
+| R5b | mpNRG forward sweep on TNOps tensors (rank-3 isometries, K/D tags); TNOps `eigen` on divide-and-conquer (decision 6) | `138a7cdc40c80fd99b8dd9ab529ab451b9b6d8d2` |

@@ -29,6 +29,15 @@ end
 
 Base.show(io::IO, l::Ladder) = (show(io, l.mode); l.dag && print(io, "†"))
 
+# Content hashes. The default hash of a struct with a Symbol field depends on
+# where the Symbol lives in memory, which changes with the code that is
+# loaded; the iteration order of the term dictionaries, and with it the
+# summation order of `densematrix` and of the operator algebra, would then
+# change between builds (round-off differences of ~1e-16 that low-temperature
+# FDM weights and 4p cancellations amplify to ~1e-12 of a PSF bin).
+Base.hash(m::Mode, h::UInt) = hash(m.name, hash(m.site, hash(:Mode, h)))
+Base.hash(l::Ladder, h::UInt) = hash(l.dag, hash(l.mode, hash(:Ladder, h)))
+
 const Word = Vector{Ladder}
 
 """

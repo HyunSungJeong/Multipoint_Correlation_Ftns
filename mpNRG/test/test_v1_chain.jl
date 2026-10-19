@@ -1,7 +1,7 @@
 # V1 (chain parts) and Sec. 5.2.10: fusion and fermionic signs through the shell
 # construction, symmetry-violation errors, truncation across blocks.
 
-using Test, MultipointNRG, LinearAlgebra
+using Test, MultipointNRG, TNOps, LinearAlgebra
 
 @testset "V1d fusion and signs: three Wilson sites vs dense Jordan-Wigner" begin
     m = siam(U = 0.6, εd = -0.25, Δ = 0.1)
@@ -35,22 +35,23 @@ using Test, MultipointNRG, LinearAlgebra
     end
     # every mode operator, built through the shell construction (refine/kron
     # rules R1, R2), equals the dense JW operator in the shell basis
-    ops = Dict{Mode,BlockOp}()
+    ops = Dict{Mode,Any}()
     for md in ms
         O = project(run, cop(md), N)       # built at its own shell, then refined
         ops[md] = O
         Od = c[idx(md)]
-        for (q, M) in O.blocks
+        for q in sectors(sh.space)
             r = target(O, q)
-            @test norm(emb.cols[r]' * Od * emb.cols[q] - M) ≤ 1e-12
+            haskey(sh.space, r) || continue
+            @test norm(emb.cols[r]' * Od * emb.cols[q] - getblock(O, q)) ≤ 1e-12
         end
     end
     # F stored by the sweep for the hopping agrees too
     for (ν, σ) in enumerate((:up, :dn))
         @test all(norm(getblock(sh.F[ν], q) - getblock(ops[Mode(N, σ)], q)) ≤ 1e-12 for q in sectors(sh.space))
     end
-    # canonical anticommutators in the shell basis (BlockOp algebra)
-    Id = identity_op(sh.space)
+    # canonical anticommutators in the shell basis (block-tensor algebra)
+    Id = identity_tensor(sh.leg)
     for a in ms, b in ms
         A = ops[a]; B = ops[b]
         X = A * B' + B' * A

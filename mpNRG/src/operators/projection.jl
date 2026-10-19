@@ -42,11 +42,11 @@ function opshift(o::LocalOperator{S}) where {S}
 end
 
 """
-    shell_operator(run, expr, n = maxsite) -> BlockOp
+    shell_operator(run, expr, n = maxsite) -> BlockTensor
 
 Matrix elements `[O^n]_{s s̄}` (all states, both sectors) of a homogeneous local
 operator in the eigenbasis of shell `n ≤ n₀`, from the dense embedding of the
-shell (exact: no truncation has happened yet).
+shell (exact: no truncation has happened yet); a tensor on the shell leg.
 """
 function shell_operator(run::NRGRun{S,T}, expr::OpExpr, n::Integer = max(maxsite(expr), -1)) where {S,T}
     n ≤ run.n0 || throw(ArgumentError("shell $n is beyond n₀ = $(run.n0)"))
@@ -56,18 +56,17 @@ function shell_operator(run::NRGRun{S,T}, expr::OpExpr, n::Integer = max(maxsite
     Tt = promote_type(T, eltype(expr) <: Real ? Float64 : ComplexF64)
     Od = densematrix(expr, emb.basis; T = Tt)
     sh = shell(run, n)
-    A = BlockOp{Tt}(sh.space, sh.space, Δ)
-    for q in sectors(sh.space)
+    blocks = Dict{S,Matrix{Tt}}()
+    for q in sectors(sh.leg)
         r = fuse(q, Δ)
-        haskey(sh.space, r) || continue
-        M = emb.cols[r]' * (Od * emb.cols[q])
-        A.blocks[q] = M
+        haskey(sh.leg, r) || continue
+        blocks[q] = emb.cols[r]' * (Od * emb.cols[q])
     end
-    return A
+    return shell_tensor(sh.leg, Δ, blocks, Tt)
 end
 
 """
-    refine(run, O, n) -> BlockOp
+    refine(run, O, n) -> BlockTensor
 
 The refinement map of a KK operator of shell `n-1` into all sectors of shell
 `n` (Lee Eqs. (31), (34)):
@@ -76,49 +75,17 @@ The refinement map of a KK operator of shell `n-1` into all sectors of shell
 
 with the fermionic parity string of rule (R1): an operator of parity `p` on
 earlier sites acts on the product basis as `Z_n^p ⊗ O`. Only the KK block of
-`O` (rows and columns in the kept ranges of shell `n-1`) enters. `O` may be
-given on the full space of shell `n-1` or on its kept space.
+`O` enters; `O` may live on the full leg of shell `n-1` or on its kept leg.
+[`refine_KK`](@ref) with the isometry of shell `n`; a `SlicedTensor` is
+refined slice by slice.
 """
-function refine(run::NRGRun{S,T}, O::BlockOp{TO,S}, n::Integer) where {S,T,TO}
-    sh = shell(run, n); prev = shell(run, n - 1)
-    Fu = legacy_fusion(sh)        # temporary (R5b): pre-refactor layout
-    Al = legacy_A(sh)
-    Tt = promote_type(T, TO)
-    Δ = O.shift
-    p = parity(Δ)
-    R = BlockOp{Tt}(sh.space, sh.space, Δ)
-    # T_q′ = (Z^p ⊗ O_KK) A_q′ per input product sector, then A_out† T
-    for (qin, prs) in Fu.pairs
-        qout = fuse(qin, Δ)
-        haskey(Fu.pairs, qout) || continue
-        Ain = Al[qin]
-        Tm = nothing
-        for pr in prs
-            Ob = get(O.blocks, pr.q, nothing)
-            Ob === nothing && continue
-            q2 = target(O, pr.q)
-            hit = get(Fu.lookup, (pr.σ, q2), nothing)
-            hit === nothing && continue
-            _, k = hit
-            p2 = Fu.pairs[qout][k]
-            dk_in = pr.dq; dk_out = p2.dq
-            Okk = view(Ob, 1:dk_out, 1:dk_in)            # KK block of shell n-1
-            sg = (p == 1 && isodd(parity(pr.σ))) ? -one(Tt) : one(Tt)
-            Tm === nothing && (Tm = zeros(Tt, dim(Fu.out, qout), size(Ain, 2)))
-            for iσ in 1:pr.dσ
-                rin = pr.offset + (iσ - 1) * dk_in
-                rout = p2.offset + (iσ - 1) * dk_out
-                mul!(view(Tm, (rout + 1):(rout + dk_out), :), Okk, view(Ain, (rin + 1):(rin + dk_in), :), sg, one(Tt))
-            end
-        end
-        Tm === nothing && continue
-        R.blocks[qin] = Al[qout]' * Tm
-    end
-    return R
+function refine(run::NRGRun, O::Union{BlockTensor,SlicedTensor}, n::Integer)
+    sh = shell(run, n)
+    return refine_KK(sh.A, sh.Adag, O)
 end
 
 """
-    project(run, op::LocalOperator, n) -> BlockOp
+    project(run, op::LocalOperator, n) -> BlockTensor
 
 The homogeneous local operator in the basis of shell `n ≥ n_op`: built exactly
 at `n_op` ([`shell_operator`](@ref)) and refined KK → next shell
@@ -146,14 +113,8 @@ end
 """
     sector_view(run, O, n, q, X, X̄)
 
-The block of `O^n` with columns in sector `q`, rows restricted to the `X`
-states of the target sector and columns to the `X̄` states of `q`
-(`X, X̄ ∈ {:K, :D}`). Empty if absent.
+The block of `O^n` with columns in the `X̄` states of sector `q` and rows in
+the `X` states of the target sector (`X, X̄ ∈ {:K, :D}`); `nothing` if absent.
+[`block_view`](@ref).
 """
-function sector_view(run::NRGRun, O::BlockOp, n::Integer, q, X::Symbol, Xb::Symbol)
-    sh = shell(run, n)
-    r = target(O, q)
-    M = get(O.blocks, q, nothing)
-    M === nothing && return nothing
-    return view(M, xrange(sh, r, X), xrange(sh, q, Xb))
-end
+sector_view(run::NRGRun, O::BlockTensor, n::Integer, q, X::Symbol, Xb::Symbol) = block_view(O, q, X, Xb)

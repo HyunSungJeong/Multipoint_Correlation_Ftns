@@ -28,7 +28,7 @@ end
 # environment parity (-1)^{N_e} on the Fock states of sites N..n+1
 env_parity(N, n) = Diagonal([isodd(count_ones(i)) ? -1.0 : 1.0 for i in 0:(4^(N - n) - 1)])
 
-# the shell-n blocks O^n_{XX̄} of a BlockOp embedded on the full chain. With the
+# the shell-n blocks O^n_{XX̄} of a shell operator embedded on the full chain. With the
 # creators of later sites to the left (|se⟩ = c†(e)|s⟩), an operator of parity p
 # on sites ≤ n acts on the environment as (-1)^{p N_e}: its AS matrix elements
 # are δ_{eē} (-1)^{p N_e} [O^n]_{ss̄} (Lee Eq. (30) writes δ_{eē}; the sign
@@ -38,11 +38,12 @@ function as_embed(run, U, O, n, X, Xb)
     sh = shell(run, n)
     Df = size(U[n].cols[first(sectors(sh.space))], 1)
     M = zeros(Df, Df)
-    for (q, B) in O.blocks
+    for q in sectors(sh.space)
         r = target(O, q)
+        haskey(sh.space, r) || continue
         rr = xrange(sh, r, X); cc = xrange(sh, q, Xb)
         (isempty(rr) || isempty(cc)) && continue
-        M .+= U[n].cols[r][:, rr] * B[rr, cc] * U[n].cols[q][:, cc]'
+        M .+= U[n].cols[r][:, rr] * getblock(O, q)[rr, cc] * U[n].cols[q][:, cc]'
     end
     Zenv = parity(O.shift) == 1 ? Matrix(env_parity(N, n)) : Matrix(1.0I, 4^(N - n), 4^(N - n))
     return kron(Zenv, M)

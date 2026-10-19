@@ -47,6 +47,7 @@ include("operators/projection.jl")
 include("fdm/fdm.jl")
 # partial spectral functions
 include("psf/grid.jl")
+include("psf/legacy_bridge.jl")    # temporary (R5c-R5e)
 include("psf/engine.jl")
 include("psf/api.jl")
 include("hooks/hooks.jl")

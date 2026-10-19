@@ -187,11 +187,11 @@ end
 `Σ_q degeneracy(q) tr[ρ̄^n_q O^n_{q}]` for a neutral shell-`n` operator, Lee
 Eq. (48) summed over sectors.
 """
-function shell_trace(run::NRGRun, f::FDM, O::BlockOp, n::Integer)
-    isneutral(O.shift) || return zero(eltype(O))
+function shell_trace(run::NRGRun, f::FDM, O::BlockTensor, n::Integer)
+    isneutral(TNOps.flux(O)) || return zero(eltype(O))
     s = zero(promote_type(eltype(O), Float64))
-    for (q, M) in O.blocks
-        s += degeneracy(q) * tr(rho_full(f, run, n, q) * M)
+    for q in unique(k[2].label for k in blockkeys(O))
+        s += degeneracy(q) * tr(rho_full(f, run, n, q) * getblock(O, q))
     end
     return s
 end
