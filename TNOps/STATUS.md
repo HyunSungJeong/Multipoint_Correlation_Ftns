@@ -20,3 +20,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 
 | Phase | Content | Pushed commit |
 |:--|:--|:--|
+| R0 | regression baseline and fixtures in `mpNRG/test/baseline/` | `debf22af2b97225347e05c0670c5fa7fd6453896` |

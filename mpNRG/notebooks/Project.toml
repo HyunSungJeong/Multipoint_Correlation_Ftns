@@ -6,7 +6,9 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MultipointNRG = "ddadee95-2439-4907-be83-7ee3b21654df"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+TNOps = "82df82ad-3d00-4a55-a7f2-2b4bd368c28a"
 
 [sources]
 HubbardAtom = {path = "../.."}
 MultipointNRG = {path = ".."}
+TNOps = {path = "../../TNOps"}

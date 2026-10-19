@@ -13,8 +13,8 @@ spectral functions (PSFs) following
 with the PSF convention of Kugler, Lee & von Delft, PRX **11**, 041006 (2021),
 Eq. (28) ["Kugler"], identical to `HubbardAtom.psf`.
 
-Layers (task sheet Sec. 3): `symmetry/` (abelian labels, block-sparse
-operators), `fock/` (modes, operator algebra, Jordan-Wigner), `bath/`
+Layers (task sheet Sec. 3): the sibling package `TNOps` (abelian labels,
+block-sparse tensors, fusion; re-exported), `fock/` (modes, operator algebra, Jordan-Wigner), `bath/`
 (hybridizations, discretization, Wilson chain), `model/`, `nrg/` (forward
 sweep), `operators/` (shell projections), `fdm/` (density matrix), `psf/`
 (grids, histograms, the 2p/3p/4p engine), `observables/`, `io/`, `hooks/`, and
@@ -25,11 +25,10 @@ module MultipointNRG
 using LinearAlgebra
 using Printf
 using JLD2
-
-# symmetry layer
-include("../../TNOps/src/symmetry.jl")
-include("../../TNOps/src/tensor.jl")
-include("../../TNOps/src/fusion.jl")
+# the abelian block-sparse layer (symmetry labels, sector spaces, block
+# operators, fusion) is the sibling package TNOps; its names are re-exported
+using TNOps
+import TNOps: fusionmap
 # local Fock spaces and operator algebra
 include("fock/operators.jl")
 include("fock/fockspace.jl")

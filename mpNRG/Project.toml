@@ -7,6 +7,10 @@ authors = ["HyunSungJeong <169745197+HyunSungJeong@users.noreply.github.com>"]
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+TNOps = "82df82ad-3d00-4a55-a7f2-2b4bd368c28a"
+
+[sources]
+TNOps = {path = "../TNOps"}
 
 [compat]
 JLD2 = "0.6"

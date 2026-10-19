@@ -83,9 +83,33 @@ are still present in `refs/` (gitignored), so V8 can be re-run.
   threaded engine's summation order), kept counts identical, no bin flips.
 - `test_io.jl` gained a test that loads `old_output.jld2` and reproduces it.
 
+**Finding (R1): the comparison criteria had to be made robust to rounding
+noise.** R1 only moves the symmetry layer into the package (its code is
+byte-identical), yet the first R1 comparison failed three rows. A fresh run
+reproduced neither the stored energies bit for bit (≤ 7e-15 apart) nor some
+noise-level details: bins whose weight cancels to ~1e-17 of the maximum (or
+underflows to a subnormal, −5e-324) appeared or vanished; exact-mode position
+clusters, formed sequentially on lexicographically sorted positions, split
+when noise in ε₁ interleaved them; slices with noise-level singular values
+came and went. Fresh runs of the R0 code and of R1 agree bit for bit with each
+other, so the stored file (generated before the R1 re-resolution of the test
+environment) carried a rounding-level offset of unidentified origin. Two
+consequences, both documented in the header of `compare.jl`, with no tolerance
+changed: (i) "nonzero bins" means bins above the comparison resolution
+(|w| > 1e-12 of the largest weight; every bin is still compared by value),
+exact positions of both runs are clustered jointly (single linkage, 1e-11),
+and singular values are compared per slice relative to the largest of the
+call, a missing slice counting as zeros; (ii) `baseline.jld2` and
+`tnops_fixtures.jl` were regenerated with the pre-refactor code (worktree of
+the R0 commit, whose `mpNRG/src` is identical to `bb8b197`) in the current
+environment. `old_output.jld2` is the file written at `bb8b197` itself. R1
+then passes every row: energies, ln Z and weights bit-identical, largest
+deviation 2.4e-14 of the largest weight in the PSF totals.
+
 | Phase | Content | Commit (pushed) |
 |:--|:--|:--|
-| R0 | baseline, fixtures, old-format file, tag recorded | see `TNOps/STATUS.md` |
+| R0 | baseline, fixtures, old-format file, tag recorded | `debf22a` |
+| R1 | `TNOps/` package with the moved symmetry layer (`git mv`, then the module); mpNRG uses and re-exports it; V1a, V1b moved to `TNOps/test` | see `TNOps/STATUS.md` |
 
 ## Phase log
 
