@@ -168,7 +168,7 @@ function psf(run::NRGRun{S,Tr}, f::FDM, ops::Tuple; grid::Union{Nothing,LogGrid}
     V = exact ? Float64 : Int
     F0 = ntuple(_ -> zero(V), L)
     tags0 = ntuple(_ -> TAG_NONE, L)
-    root_ops = [EOp{T,S,L,V}(sh, tags0, Dict(F0 => _convert_op(T, to_legacy(project(run, e, nstart), shell(run, nstart)))), e, -2)
+    root_ops = [EOp{T,S,L,V}(sh, tags0, SlicedTensor(Dict(F0 => convert_eltype(T, project(run, e, nstart)))), e, -2)
                 for (sh, e) in zip(shifts, exprs)]
     root = PSFTask{T,S,L,V}(root_ops, collect(1:ℓ), nstart, false, 0, -2, "root")
     mode = exact ? ExactMode() : BinnedMode(grid)
@@ -206,10 +206,6 @@ function psf(run::NRGRun{S,Tr}, f::FDM, ops::Tuple; grid::Union{Nothing,LogGrid}
     end
     return PSFResult{T,L}(names, shifts, ℓ, :binned, grid, data, absd, zeros(L, 0), T[], NTuple{3,Int}[], acc.total, meta)
 end
-
-_convert_op(::Type{T}, B::BlockOp{T}) where {T} = B
-_convert_op(::Type{T}, B::BlockOp{T2,S}) where {T,T2,S} =
-    BlockOp{T,S}(B.row, B.col, B.shift, Dict{S,Matrix{T}}(q => Matrix{T}(M) for (q, M) in B.blocks))
 
 """
     all_perms(ℓ) -> Vector{Vector{Int}}

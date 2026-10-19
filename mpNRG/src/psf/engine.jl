@@ -27,6 +27,20 @@
 # -ε_i with operators where possible); a composite between two other K states
 # (only KKDK for ℓ = 4) is sliced relative to its left endpoint, giving
 # ε_2 - ε_1 as in Lee Eq. (71b), and ε_2 is restored by adding the refined ε_1.
+#
+# Operators are TNOps tensors (`SlicedTensor`s of rank-2 `BlockTensor`s with
+# K/D-tagged shell legs, nrg/tensors.jl). The row-by-row spectral bookkeeping
+# (binning each row's energy differences, grouping states by bin key) is dense
+# code on single symmetry blocks; these are the
+#
+#   declared dense kernels (TNOPS_REFACTOR.md Sec. 4.4):
+#     shell_trace!, _trace_step!, _composite_left, _comp_left_step!, _addrow!,
+#     _composite_right, _comp_right_step!, _addcol!
+#
+# They see operators only through `block_view(O, q, X, X̄)`: the dense block
+# with columns in the X̄ states of label q and rows in the X states of its
+# target label (ρ̄_KK likewise). Nothing else in mpNRG/src touches blocks
+# (a test in test_nrg_tensors.jl checks this).
 
 # ---------------------------------------------------------------- modes
 
@@ -65,8 +79,9 @@ const TAG_LEFT = Int8(2)      # value is E_k - E_left (relative to the operator'
 """
     EOp
 
-An operator carried by the engine at shell `n`: its symmetry shift, and for
-every slice key a block operator. Slice keys are `NTuple{L,V}` over the `L = ℓ-1`
+An operator carried by the engine at shell `n`: its symmetry shift, and a
+`SlicedTensor` of shell operators (TNOps rank-2 tensors on the shell leg, or
+on the kept leg for composites). Slice keys are `NTuple{L,V}` over the `L = ℓ-1`
 original frequencies: entry `g` holds the sliced value (bin index or exact
 energy) of frequency `g` if `tags[g] ≠ TAG_NONE`. `orig_left` is the original
 index of its left endpoint state. Top-level local operators carry their
@@ -75,7 +90,7 @@ expression, so that their shell projections come from the cache.
 mutable struct EOp{T,S,L,V}
     shift::S
     tags::NTuple{L,Int8}
-    slices::Dict{NTuple{L,V},BlockOp{T,S}}
+    slices::SlicedTensor{NTuple{L,V},T,2,S}
     expr::Union{Nothing,OpExpr}
     born::Int
 end
@@ -192,27 +207,16 @@ _hasleft(tags) = any(==(TAG_LEFT), tags)
 
 # ---------------------------------------------------------------- operator access
 
-# Block of operator op (slice M) with column sector qc, restricted to rows rr, cols rc.
-@inline function _blk(M::BlockOp, qc, rr, rc)
-    B = get(M.blocks, qc, nothing)
-    B === nothing && return nothing
-    return view(B, rr, rc)
-end
-
-# current matrices of a carried operator at shell n
-function _advance!(ctx::EngineCtx, op::EOp, n::Int)
+# current tensors of a carried operator at shell n
+function _advance!(ctx::EngineCtx, op::EOp{T}, n::Int) where {T}
     if op.expr !== nothing
-        M = to_legacy(project(ctx.run, op.expr, n), shell(ctx.run, n))      # temporary bridge (R5c)
         k = first(keys(op.slices))
-        op.slices = Dict(k => M)
+        op.slices = SlicedTensor(Dict(k => convert_eltype(T, project(ctx.run, op.expr, n))))
     else
-        new = Dict{keytype(op.slices),valtype(op.slices)}()
-        for (k, M) in op.slices
-            R = refine(ctx.run, M, n)
-            isempty(R.blocks) || (new[k] = R)
+        op.slices = mapslices(op.slices) do M
             _count!(ctx, :refinements)
+            convert_eltype(T, refine(ctx.run, M, n))
         end
-        op.slices = new
     end
     return op
 end
@@ -267,11 +271,12 @@ function shell_trace!(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X) where {T,S,L,V}
         end
         ok || continue
         Es = [sh.E[qs[i]][rr[i]] for i in 1:m]
-        ρ = X[1] === :K ? getblock(rhoK(f, n), q1) : nothing
+        ρ = X[1] === :K ? block_view(rhoK(f, n), q1, :K, :K) : nothing
+        X[1] === :K && ρ === nothing && continue       # ρ̄_KK of q1 vanishes
         ρd = X[1] === :D ? rhoD(f, n)[q1] : nothing
         F0 = ntuple(_ -> zero(V), Val(L))
         for (k1, M1) in t.ops[1].slices
-            B1 = _blk(M1, qs[2], rr[1], m == 1 ? rr[1] : rr[2])
+            B1 = block_view(M1, qs[2], X[1], m == 1 ? X[1] : X[2])
             B1 === nothing && continue
             R = ρ === nothing ? (ρd .* B1) : ρ * B1
             Fk = _mergedirect(F0, k1, t.ops[1].tags)
@@ -315,7 +320,7 @@ function _trace_step!(ctx, t::PSFTask{T,S,L,V}, X, qs, rr, Es, i, v, F, E1, s1, 
     nxt = i == m ? 1 : i + 1
     hl = _hasleft(op.tags)
     for (k, M) in op.slices
-        B = _blk(M, qs[i + 1], rr[i], rr[nxt])
+        B = block_view(M, qs[i + 1], X[i], X[nxt])
         B === nothing && continue
         Fk = _mergedirect(F, k, op.tags)
         if i == m && !hl && mode isa BinnedMode
@@ -408,14 +413,11 @@ end
 
 function _newcomposite(t::PSFTask{T,S,L,V}, ops, tags, acc::Dict, sh) where {T,S,L,V}
     Δ = foldl(fuse, (op.shift for op in ops); init = neutral(S))
-    Vk = keptspace(sh)
-    slices = Dict{NTuple{L,V},BlockOp{T,S}}()
+    kept = kept_leg(sh.leg)
+    slices = SlicedTensor{NTuple{L,V},T}(TNOps.legs(kk_tensor(kept, Δ, Dict{S,Matrix{T}}(), T)), Δ)
     for (k, blocks) in acc
-        B = BlockOp{T}(Vk, Vk, Δ)
-        for (q, Mq) in blocks
-            any(!iszero, Mq) && (B.blocks[q] = Mq)
-        end
-        isempty(B.blocks) || (slices[k] = B)
+        B = kk_tensor(kept, Δ, blocks, T)          # all-zero blocks are not stored
+        nblocks(B) == 0 || setslice!(slices, k, B)
     end
     return EOp{T,S,L,V}(Δ, tags, slices, nothing, sh.n)
 end
@@ -461,14 +463,15 @@ function _composite_left(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X, a, b, firstseg:
             haskey(sh.space, qs[j + 1]) || (ok = false; break)
         end
         ok || continue
-        rr = [xrange(sh, qs[j], Xc(a + j - 1)) for j in 1:(b - a + 1)]
+        xs = [Xc(a + j - 1) for j in 1:(b - a + 1)]
+        rr = [xrange(sh, qs[j], xs[j]) for j in 1:(b - a + 1)]
         any(isempty, rr) && continue
         Es = [sh.E[qs[j]][rr[j]] for j in 1:(b - a + 1)]
         qb = qs[end]
         F0 = ntuple(_ -> zero(V), Val(L))
         op1 = t.ops[a]
         for (k, M) in op1.slices
-            B = _blk(M, qs[2], rr[1], rr[2])
+            B = block_view(M, qs[2], xs[1], xs[2])
             B === nothing && continue
             # tags of op a: direct entries copied; left entries kept (or made
             # direct for the first segment) with their value unchanged
@@ -479,7 +482,7 @@ function _composite_left(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X, a, b, firstseg:
                 if b == a + 1
                     _addrow!(acc, Fk, qb, sa, v, nkept(sh, qa), nkept(sh, qb), T)
                 else
-                    _comp_left_step!(ctx, t, acc, a, b, 2, qs, rr, Es, v, Fk, Es[1][sa], sa, qa, newtag, sh)
+                    _comp_left_step!(ctx, t, acc, a, b, 2, qs, rr, xs, Es, v, Fk, Es[1][sa], sa, qa, newtag, sh)
                 end
             end
         end
@@ -495,7 +498,7 @@ function _addrow!(acc, F, qb, sa, v, nra, ncb, ::Type{T}) where {T}
 end
 
 # j: position within the segment (state a + j - 1 is internal, D)
-function _comp_left_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, b, j, qs, rr, Es, v, F, Eref, sa, qa, newtag, sh) where {T,S,L,V}
+function _comp_left_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, b, j, qs, rr, xs, Es, v, F, Eref, sa, qa, newtag, sh) where {T,S,L,V}
     mode = ctx.mode
     i = a + j - 1                     # current state index (reduced), internal
     g = t.orig[i] - 1
@@ -503,7 +506,7 @@ function _comp_left_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, b, j, qs, rr, Es, v,
     hl = _hasleft(op.tags)
     Ei = Es[j]
     for (k, M) in op.slices
-        B = _blk(M, qs[j + 1], rr[j], rr[j + 1])
+        B = block_view(M, qs[j + 1], xs[j], xs[j + 1])
         B === nothing && continue
         Fk = _mergedirect(F, k, op.tags)
         groups = Dict{NTuple{L,V},Vector{Int}}()
@@ -520,7 +523,7 @@ function _comp_left_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, b, j, qs, rr, Es, v,
             if i + 1 == b
                 _addrow!(acc, F2, qs[end], sa, w, nkept(sh, qa), nkept(sh, qs[end]), T)
             else
-                _comp_left_step!(ctx, t, acc, a, b, j + 1, qs, rr, Es, w, F2, Eref, sa, qa, newtag, sh)
+                _comp_left_step!(ctx, t, acc, a, b, j + 1, qs, rr, xs, Es, w, F2, Eref, sa, qa, newtag, sh)
             end
         end
     end
@@ -546,13 +549,14 @@ function _composite_right(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X, a) where {T,S,
         ok || continue
         # qs[j] is the sector of state a + j - 1
         Xs(j) = j == nseg + 1 ? :K : X[a + j - 1]
-        rr = [xrange(sh, qs[j], Xs(j)) for j in 1:(nseg + 1)]
+        xs = [Xs(j) for j in 1:(nseg + 1)]
+        rr = [xrange(sh, qs[j], xs[j]) for j in 1:(nseg + 1)]
         any(isempty, rr) && continue
         Es = [sh.E[qs[j]][rr[j]] for j in 1:(nseg + 1)]
         F0 = ntuple(_ -> zero(V), Val(L))
         opm = t.ops[m]
         for (k, M) in opm.slices
-            B = _blk(M, q1, rr[nseg], rr[nseg + 1])
+            B = block_view(M, q1, xs[nseg], xs[nseg + 1])
             B === nothing && continue
             Fk = _mergedirect(F0, k, opm.tags)
             for s1 in axes(B, 2)
@@ -563,7 +567,7 @@ function _composite_right(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X, a) where {T,S,
                     Fk1 = ntuple(g -> opm.tags[g] == TAG_LEFT ? k[g] : Fk[g], Val(L))
                     _addcol!(acc, Fk1, q1, s1, w, nkept(sh, qs[1]), nkept(sh, q1), T)
                 else
-                    _comp_right_step!(ctx, t, acc, a, nseg, qs, rr, Es, w, Fk, k, Es[end][s1], s1, q1, sh)
+                    _comp_right_step!(ctx, t, acc, a, nseg, qs, rr, xs, Es, w, Fk, k, Es[end][s1], s1, q1, sh)
                 end
             end
         end
@@ -580,7 +584,7 @@ end
 
 # w lives on state j_state = a + j - 1 (internal D), reached by applying op
 # i = a + j - 1 with key kprev (whose left entries refer to state i).
-function _comp_right_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, j, qs, rr, Es, w, F, kprev, Eref, s1, q1, sh) where {T,S,L,V}
+function _comp_right_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, j, qs, rr, xs, Es, w, F, kprev, Eref, s1, q1, sh) where {T,S,L,V}
     mode = ctx.mode
     i = a + j - 1
     g = t.orig[i] - 1
@@ -597,7 +601,7 @@ function _comp_right_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, j, qs, rr, Es, w, F
     end
     op = t.ops[i - 1]
     for (F2, idx) in groups, (k, M) in op.slices
-        B = _blk(M, qs[j], rr[j - 1], rr[j])
+        B = block_view(M, qs[j], xs[j - 1], xs[j])
         B === nothing && continue
         Fk = _mergedirect(F2, k, op.tags)
         w2 = B[:, idx] * w[idx]
@@ -606,7 +610,7 @@ function _comp_right_step!(ctx, t::PSFTask{T,S,L,V}, acc, a, j, qs, rr, Es, w, F
             Fk1 = ntuple(gg -> op.tags[gg] == TAG_LEFT ? k[gg] : Fk[gg], Val(L))
             _addcol!(acc, Fk1, q1, s1, w2, nkept(sh, qs[1]), nkept(sh, q1), T)
         else
-            _comp_right_step!(ctx, t, acc, a, j - 1, qs, rr, Es, w2, Fk, k, Eref, s1, q1, sh)
+            _comp_right_step!(ctx, t, acc, a, j - 1, qs, rr, xs, Es, w2, Fk, k, Eref, s1, q1, sh)
         end
     end
 end

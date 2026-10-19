@@ -30,7 +30,7 @@ struct CarriedComposite
     label::String
     position::Int
     tags::Tuple
-    slices::AbstractDict
+    slices::SlicedTensor
 end
 
 """
@@ -64,7 +64,7 @@ fusionmap(c::ShellContext) = shell(c.run, c.n).fusion
 rhoKK(c::ShellContext) = rhoK(c.fdm, c.n)
 refinement_map(c::ShellContext) = O -> refine(c.run, O, c.n)
 function call_operators(c::ShellContext)
-    out = BlockOp[]
+    out = BlockTensor[]
     for t in c.tasks
         t.depth == 0 || continue
         for op in t.ops
@@ -122,7 +122,8 @@ function (rec::SingularValueRecorder)(run, n, ctx::ShellContext)
     v = get!(() -> Any[], rec.data, n)
     for c in carried(ctx)
         for (k, B) in c.slices
-            svals = reduce(vcat, [s.S for s in values(blocksvd(B))]; init = Float64[])
+            # per column label, the K and D states of the label together
+            svals = reduce(vcat, [svd(getblock(B, q)).S for q in unique(k[2].label for k in blockkeys(B))]; init = Float64[])
             push!(v, (c.born, c.depth, c.label, c.position, k, sort!(svals; rev = true)))
         end
     end
