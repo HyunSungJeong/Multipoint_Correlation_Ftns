@@ -1,297 +1,323 @@
-# Sector spaces and block-sparse operators (task sheet Sec. 5.2.4).
+# Block-sparse tensors with an abelian symmetry.
 #
-# Everything above `symmetry/` talks to block data only through the functions
-# of this file and of `fusion.jl` (Sec. 5.2.9).
+# A `BlockTensor{T,N,S}` has `N` legs, a flux `Δ::S` and a dictionary from
+# sector tuples `NTuple{N,LegSector}` (one sector per leg) to dense
+# `Array{T,N}` blocks. Block rule: a block may exist only if the charges of its
+# sectors fuse to the flux, i.e. the fused labels of the `Out` legs equal the
+# fused labels of the `In` legs fused with Δ. Absent blocks are zero and not
+# stored. `T` changes only through explicit arithmetic (promotion of the two
+# operands).
+#
+# Rank 2 with legs (`Out` row, `In` column) is the block operator of the
+# pre-refactor layer: the flux is its shift, `target(A, q) = q ⊕ Δ`, and
+# `getblock(A, q)` is keyed by the column label.
 
 """
-    SectorSpace{S}
+    BlockTensor{T,N,S}
 
-An ordered list of `(label, dimension)` pairs with labels sorted, so that runs
-are reproducible. Dimensions count block rows; the number of states a row
-stands for is [`degeneracy`](@ref)`(label)` (1 for abelian labels).
+A block-sparse tensor: legs `legs::NTuple{N,Leg{S}}`, flux `flux::S`, and blocks
+`Dict{NTuple{N,LegSector{S}},Array{T,N}}`, block `k` of size
+`(dim(legs[1], k[1]), …, dim(legs[N], k[N]))`. See the README for the block
+rule and the index conventions.
 """
-struct SectorSpace{S<:Sector}
-    labels::Vector{S}
-    dims::Vector{Int}
-    index::Dict{S,Int}
-    function SectorSpace{S}(labels::Vector{S}, dims::Vector{Int}) where {S}
-        length(labels) == length(dims) || throw(DimensionMismatch("one dimension per label"))
-        p = sortperm(labels)
-        labels = labels[p]; dims = dims[p]
-        allunique(labels) || throw(ArgumentError("duplicate sector labels"))
-        keep = dims .> 0
-        labels = labels[keep]; dims = dims[keep]
-        return new{S}(labels, dims, Dict(q => i for (i, q) in enumerate(labels)))
+struct BlockTensor{T<:Number,N,S<:Sector}
+    legs::NTuple{N,Leg{S}}
+    flux::S
+    blocks::Dict{NTuple{N,LegSector{S}},Array{T,N}}
+end
+
+"""    BlockTensor{T}(legs, flux) — the zero tensor."""
+BlockTensor{T}(legs::NTuple{N,Leg{S}}, flux::S) where {T,N,S} =
+    BlockTensor{T,N,S}(legs, flux, Dict{NTuple{N,LegSector{S}},Array{T,N}}())
+
+const BlockKey{N,S} = NTuple{N,LegSector{S}}
+
+Base.eltype(::Type{<:BlockTensor{T}}) where {T} = T
+Base.eltype(::BlockTensor{T}) where {T} = T
+Base.ndims(::BlockTensor{T,N}) where {T,N} = N
+sectortype(::BlockTensor{T,N,S}) where {T,N,S} = S
+legs(A::BlockTensor) = getfield(A, :legs)
+leg(A::BlockTensor, i::Integer) = getfield(A, :legs)[i]
+flux(A::BlockTensor) = getfield(A, :flux)
+"""    nblocks(A) — number of stored blocks."""
+nblocks(A::BlockTensor) = length(getfield(A, :blocks))
+"""    blockkeys(A) — the sector tuples of the stored blocks."""
+blockkeys(A::BlockTensor) = keys(getfield(A, :blocks))
+"""
+    eachblock(A)
+
+The stored blocks as `key => array` pairs. Read only: mutate a tensor through
+[`setblock!`](@ref) only.
+"""
+eachblock(A::BlockTensor) = pairs(getfield(A, :blocks))
+"""    blockdims(A, key) — the size of block `key` (0 along legs lacking the sector)."""
+blockdims(A::BlockTensor{T,N}, k::BlockKey) where {T,N} = ntuple(i -> dim(leg(A, i), k[i]), Val(N))
+
+# compatibility accessors of the rank-2 operator (pre-refactor field names)
+function Base.getproperty(A::BlockTensor{T,N}, s::Symbol) where {T,N}
+    if s === :shift
+        return getfield(A, :flux)
+    elseif s === :row
+        N == 2 || throw(ArgumentError(":row is defined for rank-2 tensors only"))
+        return getfield(A, :legs)[1]
+    elseif s === :col
+        N == 2 || throw(ArgumentError(":col is defined for rank-2 tensors only"))
+        return getfield(A, :legs)[2]
     end
+    return getfield(A, s)
 end
-
-SectorSpace(labels::Vector{S}, dims::AbstractVector{<:Integer}) where {S<:Sector} =
-    SectorSpace{S}(labels, collect(Int, dims))
-SectorSpace(d::AbstractDict{S,<:Integer}) where {S<:Sector} =
-    SectorSpace{S}(collect(keys(d)), collect(Int, values(d)))
-
-sectors(V::SectorSpace) = V.labels
-"""    dim(V, q) — block dimension of sector `q` in `V` (0 if absent)."""
-dim(V::SectorSpace{S}, q::S) where {S} = (i = get(V.index, q, 0); i == 0 ? 0 : V.dims[i])
-"""    dim(V) — total number of states, `Σ_q degeneracy(q) dim(q)`."""
-dim(V::SectorSpace) = sum((degeneracy(q) * d for (q, d) in zip(V.labels, V.dims)); init = 0)
-nblockrows(V::SectorSpace) = sum(V.dims; init = 0)
-Base.haskey(V::SectorSpace{S}, q::S) where {S} = haskey(V.index, q)
-Base.:(==)(V::SectorSpace, W::SectorSpace) = V.labels == W.labels && V.dims == W.dims
-Base.hash(V::SectorSpace, h::UInt) = hash(V.dims, hash(V.labels, h))
-Base.show(io::IO, V::SectorSpace) =
-    print(io, "SectorSpace(", join(["$(q.q)=>$d" for (q, d) in zip(V.labels, V.dims)], ", "), ")")
+Base.propertynames(::BlockTensor) = (:legs, :flux, :blocks, :shift, :row, :col)
 
 """
-    offsets(V) -> Dict{S,Int}
+    keyflux(legs, key) -> S
 
-Row offset of each sector in the dense embedding used by [`todense`](@ref): the
-sectors are stacked in the sorted label order of `V`.
+The fused charges of the sectors `key` on `legs` ([`charge`](@ref)); a block is
+allowed iff this equals the flux.
 """
-function offsets(V::SectorSpace{S}) where {S}
-    off = Dict{S,Int}(); o = 0
-    for (q, d) in zip(V.labels, V.dims)
-        off[q] = o; o += d
+function keyflux(ls::NTuple{N,Leg{S}}, k::BlockKey{N,S}) where {N,S}
+    q = neutral(S)
+    for i in 1:N
+        q = fuse(q, charge(ls[i], k[i]))
     end
-    return off
+    return q
+end
+keyflux(::Tuple{}, ::Tuple{}) = throw(ArgumentError("keyflux of a rank-0 key needs the tensor: use keyflux(A, ())"))
+"""    keyflux(A, key) — `keyflux(legs(A), key)`, also for rank 0 (the neutral label)."""
+keyflux(A::BlockTensor{T,0,S}, ::Tuple{}) where {T,S} = neutral(S)
+keyflux(A::BlockTensor{T,N,S}, k::BlockKey{N,S}) where {T,N,S} = keyflux(legs(A), k)
+
+"""    isallowed(A, key) — every sector exists on its leg and the block rule holds."""
+isallowed(A::BlockTensor{T,N,S}, k::BlockKey{N,S}) where {T,N,S} =
+    all(i -> haskey(leg(A, i), k[i]), 1:N) && keyflux(A, k) == flux(A)
+
+"""
+    allowed_keys(legs, flux) -> Vector{NTuple{N,LegSector}}
+
+Every sector tuple the block rule allows, in lexicographic order of the
+sector indices (first leg fastest). The last leg's label is fixed by the
+others, so no forbidden tuple is enumerated.
+"""
+function allowed_keys(ls::NTuple{N,Leg{S}}, Δ::S) where {N,S}
+    out = BlockKey{N,S}[]
+    N == 0 && return out
+    last = ls[N]
+    byLabel = Dict{S,Vector{LegSector{S}}}()
+    for s in legsectors(last)
+        push!(get!(() -> LegSector{S}[], byLabel, s.label), s)
+    end
+    heads = N == 1 ? [()] : vec(collect(Iterators.product((legsectors(l) for l in ls[1:(N - 1)])...)))
+    for h in heads
+        q = neutral(S)
+        for i in 1:(N - 1)
+            q = fuse(q, charge(ls[i], h[i]))
+        end
+        c = fuse(Δ, dual(q))                         # charge required on the last leg
+        lab = arrow(last) == Out ? c : dual(c)
+        for s in get(byLabel, lab, LegSector{S}[])
+            push!(out, (h..., s))
+        end
+    end
+    return out
+end
+allowed_keys(A::BlockTensor) = allowed_keys(legs(A), flux(A))
+
+"""
+    setblock!(A, key, M)
+
+Store block `M` for the sector tuple `key`, checking that the sectors exist,
+that the block rule allows the block and that the size matches. Empty blocks
+are not stored.
+"""
+function setblock!(A::BlockTensor{T,N,S}, k::BlockKey{N,S}, M::AbstractArray) where {T,N,S}
+    for i in 1:N
+        haskey(leg(A, i), k[i]) || throw(ArgumentError("leg $i ($(legstring(leg(A, i)))) has no sector $(k[i])"))
+    end
+    keyflux(A, k) == flux(A) ||
+        throw(ArgumentError("block $k is forbidden by the flux $(flux(A)) (its charges fuse to $(keyflux(A, k)))"))
+    sz = blockdims(A, k)
+    size(M) == sz || throw(DimensionMismatch("block $k must have size $sz, got $(size(M))"))
+    isempty(M) && return A
+    getfield(A, :blocks)[k] = convert(Array{T,N}, M)
+    return A
 end
 
 """
-    BlockOp{T,S}
+    getblock(A, key) -> Array
 
-A block-sparse operator with a definite symmetry shift `Δ`: it maps sector `q`
-of the column space to sector `q ⊕ Δ` of the row space. `blocks[q]` is the
-dense `dim(q ⊕ Δ) × dim(q)` matrix; absent blocks are zero and not stored. `T`
-is `Float64` unless the model or an operator is genuinely complex (no silent
-promotion: mixing types in `+` or `*` promotes explicitly through `promote_type`
-of the two operands only).
+The block of the sector tuple `key`; a zero array of the right size if it is
+not stored.
 """
-struct BlockOp{T<:Number,S<:Sector}
-    row::SectorSpace{S}
-    col::SectorSpace{S}
-    shift::S
-    blocks::Dict{S,Matrix{T}}
+function getblock(A::BlockTensor{T,N,S}, k::BlockKey{N,S}) where {T,N,S}
+    b = get(getfield(A, :blocks), k, nothing)
+    b === nothing || return b
+    return zeros(T, blockdims(A, k))
+end
+"""    hasblock(A, key) — whether block `key` is stored."""
+hasblock(A::BlockTensor{T,N,S}, k::BlockKey{N,S}) where {T,N,S} = haskey(getfield(A, :blocks), k)
+"""    blockornothing(A, key) — the stored block or `nothing`."""
+blockornothing(A::BlockTensor{T,N,S}, k::BlockKey{N,S}) where {T,N,S} = get(getfield(A, :blocks), k, nothing)
+
+Base.copy(A::BlockTensor{T,N,S}) where {T,N,S} =
+    BlockTensor{T,N,S}(legs(A), flux(A), Dict(k => copy(M) for (k, M) in eachblock(A)))
+
+"""    convert_eltype(T, A) — `A` with element type `T` (no copy if it already has it)."""
+convert_eltype(::Type{T}, A::BlockTensor{T}) where {T} = A
+convert_eltype(::Type{T}, A::BlockTensor{T2,N,S}) where {T,T2,N,S} =
+    BlockTensor{T,N,S}(legs(A), flux(A), Dict(k => convert(Array{T,N}, M) for (k, M) in eachblock(A)))
+
+"""
+    randtensor(rng, T, legs, flux; density = 1)
+
+A tensor with standard-normal blocks on a random fraction `density` of the
+allowed sector tuples (for tests and examples).
+"""
+function randtensor(rng, ::Type{T}, ls::NTuple{N,Leg{S}}, Δ::S; density::Real = 1.0) where {T,N,S}
+    A = BlockTensor{T}(ls, Δ)
+    for k in allowed_keys(ls, Δ)
+        rand(rng) ≤ density || continue
+        setblock!(A, k, randn(rng, T, blockdims(A, k)))
+    end
+    return A
 end
 
-"""    BlockOp{T}(row, col, shift) — the zero operator."""
-BlockOp{T}(row::SectorSpace{S}, col::SectorSpace{S}, shift::S) where {T,S} =
-    BlockOp{T,S}(row, col, shift, Dict{S,Matrix{T}}())
+# ---------------------------------------------------------------- rank 2
 
-Base.eltype(::BlockOp{T}) where {T} = T
-shift(A::BlockOp) = A.shift
-rowspace(A::BlockOp) = A.row
-colspace(A::BlockOp) = A.col
-Base.size(A::BlockOp) = (nblockrows(A.row), nblockrows(A.col))
+"""
+    target(A, q) -> label
 
-"""    target(A, q) — the row sector `q ⊕ Δ` reached from column sector `q`."""
-target(A::BlockOp{T,S}, q::S) where {T,S} = fuse(q, A.shift)
+For a rank-2 tensor: the row label reached from column label `q`, `q ⊕ Δ` for
+legs (`Out`, `In`).
+"""
+function target(A::BlockTensor{T,2,S}, q::S) where {T,S}
+    r, c = legs(A)
+    qc = arrow(c) == Out ? q : dual(q)
+    need = fuse(flux(A), dual(qc))
+    return arrow(r) == Out ? need : dual(need)
+end
 
 """
     getblock(A, q) -> Matrix
 
-Block of `A` acting on column sector `q`; a zero matrix of the right size if
-absent (or a 0×0 matrix if either sector is missing from its space).
+For a rank-2 tensor: the block of all sectors with column label `q` and row
+label `target(A, q)`, the tags of each label stacked in ascending order (for
+untagged legs this is the stored block itself); a zero matrix of the right
+size if nothing is stored.
 """
-function getblock(A::BlockOp{T,S}, q::S) where {T,S}
-    b = get(A.blocks, q, nothing)
-    b === nothing || return b
-    return zeros(T, dim(A.row, target(A, q)), dim(A.col, q))
+function getblock(A::BlockTensor{T,2,S}, q::S) where {T,S}
+    r = target(A, q)
+    rl, cl = legs(A)
+    rs = [s for s in legsectors(rl) if s.label == r]; cs = [s for s in legsectors(cl) if s.label == q]
+    if length(rs) ≤ 1 && length(cs) ≤ 1
+        (isempty(rs) || isempty(cs)) && return zeros(T, dim(rl, r), dim(cl, q))
+        return getblock(A, (rs[1], cs[1]))
+    end
+    M = zeros(T, dim(rl, r), dim(cl, q))
+    ro = 0
+    for a in rs
+        co = 0
+        for b in cs
+            B = blockornothing(A, (a, b))
+            B === nothing || (M[ro .+ (1:size(B, 1)), co .+ (1:size(B, 2))] .= B)
+            co += dim(cl, b)
+        end
+        ro += dim(rl, a)
+    end
+    return M
 end
 
 """
     setblock!(A, q, M)
 
-Store block `M` for column sector `q`, checking its size against the spaces.
-Blocks of a sector missing from either space must be empty.
+For a rank-2 tensor: store the label block of column label `q` (layout of
+[`getblock`](@ref)`(A, q)`), split into its tagged blocks.
 """
-function setblock!(A::BlockOp{T,S}, q::S, M::AbstractMatrix) where {T,S}
+function setblock!(A::BlockTensor{T,2,S}, q::S, M::AbstractMatrix) where {T,S}
     r = target(A, q)
-    size(M) == (dim(A.row, r), dim(A.col, q)) ||
-        throw(DimensionMismatch("block for $q must be $(dim(A.row, r))×$(dim(A.col, q)), got $(size(M))"))
+    rl, cl = legs(A)
+    size(M) == (dim(rl, r), dim(cl, q)) ||
+        throw(DimensionMismatch("block for $q must be $(dim(rl, r))×$(dim(cl, q)), got $(size(M))"))
     isempty(M) && return A
-    A.blocks[q] = convert(Matrix{T}, M)
-    return A
-end
-
-function Base.:*(A::BlockOp{TA,S}, B::BlockOp{TB,S}) where {TA,TB,S}
-    A.col == B.row || throw(DimensionMismatch("inner sector spaces differ"))
-    T = promote_type(TA, TB)
-    C = BlockOp{T}(A.row, B.col, fuse(A.shift, B.shift))
-    for (q, Bq) in B.blocks
-        r = target(B, q)
-        Ar = get(A.blocks, r, nothing)
-        Ar === nothing && continue
-        C.blocks[q] = Ar * Bq
-    end
-    return C
-end
-
-function Base.:+(A::BlockOp{TA,S}, B::BlockOp{TB,S}) where {TA,TB,S}
-    A.row == B.row && A.col == B.col || throw(DimensionMismatch("sector spaces differ"))
-    A.shift == B.shift || throw(ArgumentError("cannot add operators with shifts $(A.shift) and $(B.shift)"))
-    T = promote_type(TA, TB)
-    C = BlockOp{T}(A.row, A.col, A.shift)
-    for (q, M) in A.blocks
-        C.blocks[q] = copy(convert(Matrix{T}, M))
-    end
-    for (q, M) in B.blocks
-        C.blocks[q] = haskey(C.blocks, q) ? C.blocks[q] + M : copy(convert(Matrix{T}, M))
-    end
-    return C
-end
-
-Base.:-(A::BlockOp) = (-1) * A
-Base.:-(A::BlockOp, B::BlockOp) = A + (-1) * B
-
-function Base.:*(a::Number, A::BlockOp{TA,S}) where {TA,S}
-    T = promote_type(typeof(a), TA)
-    return BlockOp{T,S}(A.row, A.col, A.shift, Dict(q => a * M for (q, M) in A.blocks))
-end
-Base.:*(A::BlockOp, a::Number) = a * A
-
-"""
-    adjoint(A)
-
-Hermitian conjugate: row and column spaces swap, the shift is dualized and every
-block is conjugate-transposed (block `q → q⊕Δ` becomes block `q⊕Δ → q`).
-"""
-function Base.adjoint(A::BlockOp{T,S}) where {T,S}
-    C = BlockOp{T}(A.col, A.row, dual(A.shift))
-    for (q, M) in A.blocks
-        C.blocks[target(A, q)] = Matrix(M')
-    end
-    return C
-end
-
-"""
-    tr(A)
-
-Trace `Σ_q degeneracy(q) tr A_q`; zero unless `A` is neutral (a block of a
-non-neutral operator never sits on the diagonal).
-"""
-function LinearAlgebra.tr(A::BlockOp{T}) where {T}
-    isneutral(A.shift) || return zero(T)
-    A.row == A.col || throw(DimensionMismatch("trace needs equal row and column spaces"))
-    return sum((degeneracy(q) * tr(M) for (q, M) in A.blocks); init = zero(T))
-end
-
-"""
-    blockeigen(H) -> Dict{S, (values, vectors)}
-
-Block-wise eigendecomposition of a hermitian neutral operator. Eigenvalues are
-tagged with their sector through the dictionary key; within a sector they are
-ascending. Sectors without a stored block have all eigenvalues zero.
-"""
-function blockeigen(H::BlockOp{T,S}) where {T,S}
-    isneutral(H.shift) || throw(ArgumentError("eigen needs a neutral operator"))
-    H.row == H.col || throw(DimensionMismatch("eigen needs equal row and column spaces"))
-    out = Dict{S,Tuple{Vector{Float64},Matrix{T}}}()
-    for (q, d) in zip(H.col.labels, H.col.dims)
-        M = getblock(H, q)
-        F = eigen(Hermitian((M + M') / 2))
-        out[q] = (F.values, F.vectors)
-    end
-    return out
-end
-
-"""
-    blocksvd(A) -> Dict{S, SVD}
-
-Block-wise singular value decomposition, keyed by column sector.
-"""
-blocksvd(A::BlockOp{T,S}) where {T,S} = Dict{S,SVD}(q => svd(M) for (q, M) in A.blocks)
-
-"""
-    todense(A) -> Matrix
-
-Embed `A` into an explicit matrix. Rows and columns are ordered by stacking the
-sectors of the row and column spaces in their sorted label order
-([`offsets`](@ref)). For tests only.
-"""
-function todense(A::BlockOp{T}) where {T}
-    ro = offsets(A.row); co = offsets(A.col)
-    D = zeros(T, nblockrows(A.row), nblockrows(A.col))
-    for (q, M) in A.blocks
-        r = target(A, q)
-        D[ro[r] .+ (1:size(M, 1)), co[q] .+ (1:size(M, 2))] .= M
-    end
-    return D
-end
-
-"""
-    identity_op(V, T = Float64)
-
-The identity on `V` as a neutral `BlockOp`.
-"""
-function identity_op(V::SectorSpace{S}, ::Type{T} = Float64) where {S,T}
-    A = BlockOp{T}(V, V, neutral(S))
-    for (q, d) in zip(V.labels, V.dims)
-        A.blocks[q] = Matrix{T}(I, d, d)
+    ro = 0
+    for a in legsectors(rl)
+        a.label == r || continue
+        co = 0
+        for b in legsectors(cl)
+            b.label == q || continue
+            setblock!(A, (a, b), M[ro .+ (1:dim(rl, a)), co .+ (1:dim(cl, b))])
+            co += dim(cl, b)
+        end
+        ro += dim(rl, a)
     end
     return A
 end
 
-"""    norm(A) — Frobenius norm over all blocks."""
-LinearAlgebra.norm(A::BlockOp) = sqrt(sum((sum(abs2, M) for M in values(A.blocks)); init = 0.0))
+"""
+    BlockTensor{T}(row::Leg, col::Leg, Δ) — the zero rank-2 operator with legs
+    (`row` as `Out`, `col` as `In`), the layout of the pre-refactor `BlockOp`.
+"""
+BlockTensor{T}(row::Leg{S}, col::Leg{S}, Δ::S) where {T,S} = BlockTensor{T}((witharrow(row, Out), witharrow(col, In)), Δ)
 
 """
-    restrict(A, rows, cols) -> BlockOp
+    identity_tensor(l, T = Float64)
 
-Restrict `A` to subspaces: `rows[r]` and `cols[q]` are index ranges into the
-blocks of sector `r` (row) and `q` (column). Sectors absent from the
-dictionaries are dropped. The result lives on the subspaces with dimensions
-`length(rows[r])`, `length(cols[q])`.
+The identity on leg `l` as a neutral rank-2 tensor with legs (`l` as `Out`, `l`
+as `In`).
 """
-function restrict(A::BlockOp{T,S}, rows::Dict{S,UnitRange{Int}}, cols::Dict{S,UnitRange{Int}}) where {T,S}
-    rs = SectorSpace(Dict(q => length(r) for (q, r) in rows))
-    cs = SectorSpace(Dict(q => length(r) for (q, r) in cols))
-    C = BlockOp{T}(rs, cs, A.shift)
-    for (q, M) in A.blocks
-        r = target(A, q)
-        (haskey(rows, r) && haskey(cols, q)) || continue
-        rr = rows[r]; cc = cols[q]
-        (isempty(rr) || isempty(cc)) && continue
-        C.blocks[q] = M[rr, cc]
+function identity_tensor(l::Leg{S}, ::Type{T} = Float64) where {S,T}
+    A = BlockTensor{T}(l, l, neutral(S))
+    for (s, d) in zip(legsectors(l), l.dims)
+        setblock!(A, (s, s), Matrix{T}(I, d, d))
     end
-    return C
+    return A
 end
 
 """
-    SlicedBlockOp{T,S,Kt}
+    subtensor(A, keep) -> BlockTensor
 
-A block-sparse operator with one or more open frequency legs (Lee Eq. (60) and
-Sec. V D): for every slice key `k::Kt` (a bin index, a tuple of bin indices for
-two open legs, or an exact energy in Lehmann mode) it stores a [`BlockOp`](@ref)
-on common spaces with a common shift. The slices are kept as a sparse map from
-key to operator: only bins that receive weight are stored, which is the
-measured fill of every sliced object built by the PSF engine (it is reported in
-the PSF metadata). Contractions over the symmetry legs act slice by slice; the
-bin legs pass through untouched ([`mapslices_op`](@ref)).
+`A` restricted to the sectors `s` of leg `i` with `keep[i](s)` (`nothing` keeps
+the whole leg); the legs shrink accordingly. Example: the kept-kept part of an
+NRG shell operator, `subtensor(O, (s -> s.tag == 1, s -> s.tag == 1))`.
 """
-struct SlicedBlockOp{T<:Number,S<:Sector,Kt}
-    row::SectorSpace{S}
-    col::SectorSpace{S}
-    shift::S
-    slices::Dict{Kt,BlockOp{T,S}}
+function subtensor(A::BlockTensor{T,N,S}, keep::NTuple{N,Any}) where {T,N,S}
+    ls = ntuple(i -> keep[i] === nothing ? leg(A, i) : subleg(leg(A, i), keep[i]), Val(N))
+    B = BlockTensor{T}(ls, flux(A))
+    for (k, M) in eachblock(A)
+        all(i -> keep[i] === nothing || keep[i](k[i]), 1:N) || continue
+        getfield(B, :blocks)[k] = M
+    end
+    return B
 end
 
-SlicedBlockOp{T,S,Kt}(row::SectorSpace{S}, col::SectorSpace{S}, shift::S) where {T,S,Kt} =
-    SlicedBlockOp{T,S,Kt}(row, col, shift, Dict{Kt,BlockOp{T,S}}())
-
-nslices(A::SlicedBlockOp) = length(A.slices)
-
 """
-    mapslices_op(f, A::SlicedBlockOp) -> SlicedBlockOp
+    restrict(A, ranges) -> BlockTensor
 
-Apply a contraction `f` over the symmetry legs to every slice, leaving the bin
-legs untouched. All slices must map to operators on common spaces.
+`A` restricted to index ranges inside sectors: `ranges[i]` is `nothing` (keep
+leg `i`) or a `Dict(sector => range)`; sectors absent from a dictionary are
+dropped. The new legs have the range lengths as dimensions.
 """
-function mapslices_op(f, A::SlicedBlockOp{T,S,Kt}) where {T,S,Kt}
-    out = Dict{Kt,BlockOp{T,S}}()
-    for (k, B) in A.slices
-        out[k] = f(B)
+function restrict(A::BlockTensor{T,N,S}, ranges::NTuple{N,Any}) where {T,N,S}
+    ls = ntuple(Val(N)) do i
+        ranges[i] === nothing && return leg(A, i)
+        l = leg(A, i)
+        Leg{S}(collect(keys(ranges[i])), [length(r) for r in values(ranges[i])], arrow(l), legname(l))
     end
-    isempty(out) && return A
-    B1 = first(values(out))
-    return SlicedBlockOp{T,S,Kt}(B1.row, B1.col, B1.shift, out)
+    B = BlockTensor{T}(ls, flux(A))
+    for (k, M) in eachblock(A)
+        idx = ntuple(Val(N)) do i
+            ranges[i] === nothing ? (1:size(M, i)) : get(ranges[i], k[i], nothing)
+        end
+        any(isnothing, idx) && continue
+        any(isempty, idx) && continue
+        getfield(B, :blocks)[k] = M[idx...]
+    end
+    return B
+end
+
+"""
+    restrict(A::BlockTensor{T,2}, rows::Dict{label,range}, cols::Dict{label,range})
+
+Rank-2 form keyed by labels (untagged legs), as in the pre-refactor layer.
+"""
+function restrict(A::BlockTensor{T,2,S}, rows::AbstractDict{S,UnitRange{Int}}, cols::AbstractDict{S,UnitRange{Int}}) where {T,S}
+    return restrict(A, (Dict(LegSector(q) => r for (q, r) in rows), Dict(LegSector(q) => r for (q, r) in cols)))
 end

@@ -21,3 +21,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | Phase | Content | Pushed commit |
 |:--|:--|:--|
 | R0 | regression baseline and fixtures in `mpNRG/test/baseline/` | `debf22af2b97225347e05c0670c5fa7fd6453896` |
+| R1 | `TNOps/` package: `git mv` of the symmetry layer, module wrapper, tests V1a/V1b | `9fb953612984b11a392d8d1d41ca3dcfd359d232` |
