@@ -141,6 +141,24 @@ independent reference, and PSFs export to its kernels. Verification record, devi
 | `mpNRG/docs/TASK.md` | V7 | SIAM: entropy ln 4 → ln 2 → 0, `⟨n_d⟩ = 1`, Friedel plateau | 1.381, 0.683, 1e-5; 1e-15; 0.995 |
 | `mpNRG/docs/TASK.md` | V8 | LMU Open Data 613 (Frankenbach et al.): 2p totals; 2p bins after the dataset's binning; connected 4p totals (48); 4p marginals | 7e-6; 7–15 %; 0.4 %; 11 % (= the 2p difference) |
 
+### TNOps
+
+A separate Julia package, `TNOps` in [`TNOps/`](TNOps/README.md): basic tensor-network operations on abelian
+block-sparse tensors (symmetry labels with the fermion parity, tagged legs with arrows, rank-k `BlockTensor`,
+`SlicedTensor`, contraction, fusion, factorizations, global degeneracy-safe truncation), with no dependency besides
+`LinearAlgebra` and `Printf`. `MultipointNRG` runs on it since the TNOps refactor (sheet
+[`mpNRG/docs/TNOPS_REFACTOR.md`](mpNRG/docs/TNOPS_REFACTOR.md)); every mpNRG result is unchanged up to round-off.
+Record: [`TNOps/STATUS.md`](TNOps/STATUS.md). Tests: `julia --project=TNOps/test TNOps/test/runtests.jl` (2352
+assertions); executed checks: `TNOps/notebooks/tnops_checks.ipynb`.
+
+| Sheet | Item | Check | Accuracy |
+|:--|:--|:--|:--|
+| `mpNRG/docs/TNOPS_REFACTOR.md` | 3.7 | `BlockTensor` arithmetic, `permute`, `contract`, `ncon`, `tr` vs dense arrays (ranks 1–5, three symmetries, real/complex) | ≤ 4e-16 |
+| `mpNRG/docs/TNOPS_REFACTOR.md` | 3.7 | `fusionmap`, `kron_fused`, `global_cut` vs the frozen pre-refactor `fusionmap`, `kron_op`, `truncate_shell` | identical |
+| `mpNRG/docs/TNOPS_REFACTOR.md` | 3.7 | `eigen`, `svd`, `qr` reconstruction (with flux, on leg partitions) | ≤ 2.6e-15 |
+| `mpNRG/docs/TNOPS_REFACTOR.md` | 4.3 | `nrg/tensors.jl` contractions vs the pre-refactor implementation (frozen fixtures) and vs dense Jordan–Wigner | ≤ 1e-13 |
+| `mpNRG/docs/TNOPS_REFACTOR.md` | 8 | regression baseline: 4 SIAM runs, all mpNRG quantities vs the pre-refactor code; kept counts | ≤ 3.7e-13 rel.; identical |
+
 ## Findings
 
 **Eq. (85) is right; the PDF text layer is not.** The text layer puts both
@@ -315,6 +333,7 @@ notebooks/figures/heatmaps/   atom P1-P5 (PNG, PDF, .jld2)
 notebooks/figures/aim/        AIM O2, O3 (PNG, PDF, .jld2)
 notebooks/figures/psf_lanczos/  PSF Lanczos P1-P6 (PNG, PDF, .jld2)
 mpNRG/                  separate package MultipointNRG (layout in mpNRG/README.md)
+TNOps/                  separate package TNOps, abelian block-sparse tensors (layout in TNOps/README.md)
 ```
 
 ## Reproducibility

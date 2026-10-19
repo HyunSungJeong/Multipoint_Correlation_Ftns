@@ -123,6 +123,17 @@ A = split_legs(U, 1, F)                            # legs (bath, site, bond)
 contract(A, (1, 2), adjoint(A, (1, 2), (3,)), (2, 3))   # = 1 on the bond
 ```
 
+## Compatibility names
+
+The rank-2 layer that `MultipointNRG` had before this package existed is kept as
+aliases and thin wrappers (`src/compat.jl`): `SectorSpace === Leg`
+(`SectorSpace(Dict(q => d))` is an untagged `Out` leg), `BlockOp{T,S} =
+BlockTensor{T,2,S}` (`BlockOp{T}(row, col, Δ)`, `A.shift`, `A.row`, `A.col`,
+column-label keyed `getblock`/`setblock!`), `SlicedBlockOp{T,S,Kt} =
+SlicedTensor{Kt,T,2,S}`, `mapslices_op = mapslices`, `identity_op =
+identity_tensor`, `kron_op = kron_fused`, and `blockeigen` / `blocksvd`, which
+return the old per-label dictionaries. New code uses the generic names.
+
 ## Layout
 
 ```
@@ -138,6 +149,7 @@ src/factorize.jl  eigen, svd, qr on a leg partition; global_cut
 src/parity.jl     parity_tensor, apply_parity
 src/ncon.jl       ncon with a caller-given contraction order
 src/interface.jl  the symmetry interface a non-abelian layer must supply
+src/compat.jl     names of the pre-refactor rank-2 layer of MultipointNRG (aliases, thin wrappers)
 test/             tests against dense arrays and against frozen output of the old layer
 notebooks/        tnops_checks.ipynb (executed) and its PDF
 ```

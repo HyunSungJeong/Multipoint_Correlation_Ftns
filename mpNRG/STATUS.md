@@ -112,13 +112,18 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R1 | `TNOps/` package with the moved symmetry layer (`git mv`, then the module); mpNRG uses and re-exports it; V1a, V1b moved to `TNOps/test` | `9fb9536` |
 | R2 | TNOps: legs, `BlockTensor`, `SlicedTensor`, contractions, dense maps (mpNRG unchanged, still on the legacy layer) | `268d6ca` |
 | R3 | TNOps: fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook; mpNRG refers to the legacy fusion type as `OldFusionMap` | `1c38847` |
-| R4 | `nrg/tensors.jl`: the named NRG contractions on TNOps tensors (`fuse_site`, `product_hamiltonian`, `diagonalize_shell`, `rotate`, `lift_site`, `refine_KK`, `backward_step`, `shell_trace`, `block_view`, …) with `test_nrg_tensors.jl` (frozen fixtures to 1e-13; dense JW reference, 3 interacting spinful sites); not yet used by the sweep | see `TNOps/STATUS.md` |
+| R4 | `nrg/tensors.jl`: the named NRG contractions on TNOps tensors (`fuse_site`, `product_hamiltonian`, `diagonalize_shell`, `rotate`, `lift_site`, `refine_KK`, `backward_step`, `shell_trace`, `block_view`, …) with `test_nrg_tensors.jl` (frozen fixtures to 1e-13; dense JW reference, 3 interacting spinful sites); not yet used by the sweep | `6c119a6` |
 | R5a | `fock/` (`localop`, `parity_op` are tensors on the site leg) and `reference/ed.jl` (ED operators as tensors; ED PSFs and averages stay dense) | `02f2d10` |
-| R5b | forward sweep on TNOps tensors: rank-3 `A^n` with K/D-tagged legs, `diagonalize_shell`, `global_cut` truncation, `lift_site` for `F`; temporary pre-refactor views for `operators/` and `fdm/`; TNOps `eigen` on the divide-and-conquer driver (finding below) | see `TNOps/STATUS.md` |
-| R5c | `operators/`: `shell_operator`, `refine` (= `refine_KK` with the shell isometry), `project` return TNOps tensors, `sector_view` = `block_view`; content hashes for `Mode`/`Ladder` (finding below); the PSF engine still on the pre-refactor operators through a temporary bridge `psf/legacy_bridge.jl` | see `TNOps/STATUS.md` |
-| R5d | `fdm/`: the backward sweep is `backward_step` on `rho_full` per shell, `ρ̄^n_{KK}` a tensor on the kept leg (`rhoK(f, n)`); `shell_trace` and `fdm_checks` on tensors; the pre-refactor views of the isometry are removed from `Shell` | see `TNOps/STATUS.md` |
-| R5e | `psf/`: carried operators are `SlicedTensor`s of shell tensors, composites `kk_tensor`s on the kept leg, refinement `mapslices` of `refine`; the declared dense kernels (listed at the top of `psf/engine.jl`) read blocks only through `block_view`; the temporary bridge is deleted | see `TNOps/STATUS.md` |
-| R5f | `hooks/`: docstrings and memory-layout paragraph for the tensor objects, `CarriedComposite.slices` a `SlicedTensor`, `SingularValueRecorder` per label block; `observables/`, `io/` and `psf/api.jl` needed no change beyond R5e; the grep test of Sec. 4.1 in `test_nrg_tensors.jl` (no `.blocks` in `mpNRG/src` outside `nrg/tensors.jl` and the declared kernels; checked to flag a planted occurrence and to exempt the kernels) | see `TNOps/STATUS.md` |
+| R5b | forward sweep on TNOps tensors: rank-3 `A^n` with K/D-tagged legs, `diagonalize_shell`, `global_cut` truncation, `lift_site` for `F`; temporary pre-refactor views for `operators/` and `fdm/`; TNOps `eigen` on the divide-and-conquer driver (finding below) | `138a7cd` |
+| R5c | `operators/`: `shell_operator`, `refine` (= `refine_KK` with the shell isometry), `project` return TNOps tensors, `sector_view` = `block_view`; content hashes for `Mode`/`Ladder` (finding below); the PSF engine still on the pre-refactor operators through a temporary bridge `psf/legacy_bridge.jl` | `1c225fe` |
+| R5d | `fdm/`: the backward sweep is `backward_step` on `rho_full` per shell, `ρ̄^n_{KK}` a tensor on the kept leg (`rhoK(f, n)`); `shell_trace` and `fdm_checks` on tensors; the pre-refactor views of the isometry are removed from `Shell` | `9aad3f4` |
+| R5e | `psf/`: carried operators are `SlicedTensor`s of shell tensors, composites `kk_tensor`s on the kept leg, refinement `mapslices` of `refine`; the declared dense kernels (listed at the top of `psf/engine.jl`) read blocks only through `block_view`; the temporary bridge is deleted | `e7f9f68` |
+| R5f | `hooks/`: docstrings and memory-layout paragraph for the tensor objects, `CarriedComposite.slices` a `SlicedTensor`, `SingularValueRecorder` per label block; `observables/`, `io/` and `psf/api.jl` needed no change beyond R5e; the grep test of Sec. 4.1 in `test_nrg_tensors.jl` (no `.blocks` in `mpNRG/src` outside `nrg/tensors.jl` and the declared kernels; checked to flag a planted occurrence and to exempt the kernels) | `ed7ba54` |
+| R6a | `TNOps/src/legacy.jl` replaced by aliases and thin wrappers (`compat.jl`); content hashes for `Sector`, `LegSector`, `Arrow`; README "Changes in the TNOps refactor"; V1d and `build_notebook.py` without changed internals; `scripts/timing_compare.jl` | `0c10fe1` |
+| R6b | `RefinePlan`: the refinement map of the PSF engine on the isometry in fused-matrix form (finding R6 below); notebook section "Refactor regression (TNOps)"; `docs/TASK.md` amended | `4cf33a3` |
+| R6c | `timing_compare.jl`: minimum over repetitions after a full GC | `839b151` |
+| R6d | TNOps notebook re-executed and its PDF regenerated; timing comparison (`timing_compare.jld2`); STATUS, README (root, TNOps) records | see `TNOps/STATUS.md` |
+| R6e | V8 re-run, `mpnrg_validation.ipynb` re-executed with the regression section, PDF and figures regenerated; verification record re-confirmed | see `TNOps/STATUS.md` |
 
 **Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
 With the sweep on TNOps tensors, V1d failed one assertion: the shell-2
@@ -164,6 +169,62 @@ changed):
    stored baseline (all rows pass, PSF totals 3.1e-13), so the stored
    baseline is kept; R5c with the fix passes it with R5b's margins (PSF
    totals 1.8e-13).
+
+**Finding (R6): the generic contraction made the PSF engine slow; the
+refinement map now has a precomputed plan.** The first timing comparison
+(`scripts/timing_compare.jl`, Sec. 9.4 of the sheet) after R5 gave the
+engine 1.45–2.2× (4p), 1.8–3.5× (3p) and up to 4.7× (2p) the time of the
+pre-refactor code. Serial runs and profiles located it: `refine` (one call per
+carried slice per shell, 6e5 calls in a 4p PSF) took 0.28 ms instead of
+0.044 ms at `N_keep = 25`, almost all of it in the bookkeeping of the generic
+`contract` (dictionaries of block pairs, rehashing, hashing of sector tuples,
+small allocations; the matrix products were 9 %). Changes (R6b): every shell
+stores a `RefinePlan` — the isometry in the fused-matrix form of
+`isometry_matrix`, one dense matrix per label, built once — and
+`refine_KK(plan, O)` applies `(Z^p ⊗ O_KK)` pair by pair of the fusion map
+and multiplies by `A_out†` per tagged block, writing the K/D blocks
+directly. It is the same contraction as `refine_KK(A, Adag, O)`, which stays
+as the reference: `test_nrg_tensors.jl` checks the plan against it (≤ 1e-14)
+and against the frozen pre-refactor fixtures (≤ 1e-13), for operators on the
+full and on the kept leg. Two more items: a `sizehint!` on the block
+dictionary, added on the way, cost more than it saved (removed), and the
+content hashes were simplified. After R6b, `refine` takes 0.04–0.06 ms at
+`N_keep = 25`, and serial 3p PSFs are as fast as before the refactor
+(`N_keep = 100`: 3.1 s vs 3.6 s).
+
+**Timing comparison (R6, `notebooks/figures/mpnrg/timing_compare.jld2`).**
+Intel Xeon @ 2.80 GHz, 4 hardware threads, 4 Julia threads for both
+versions, Julia 1.13.0; SIAM `U = 0.2`, `Δ = 0.04`, `Λ = 4`, `T = 1e-4`,
+`N = 18`, `n_dec = 8`. Pre-refactor code: a `git worktree` of `bb8b197`;
+refactored: `839b151`. Each version in a fresh process after a warm-up run;
+every timed call after a full GC, minimum over 5 (sweep, 2p), 3 (3p) and 1
+(4p) repetitions.
+
+| `N_keep` | sweep [s] old / new | 2p [s] old / new | 3p [s] old / new | 4p [s] old / new |
+|--:|:--|:--|:--|:--|
+| 25 | 0.076 / 0.099 (1.29×) | 0.0026 / 0.0034 (1.29×) | 0.22 / 0.19 (0.86×) | 21.3 / 29.9 (1.40×) |
+| 50 | 0.086 / 0.122 (1.41×) | 0.0046 / 0.0052 (1.13×) | 0.37 / 0.45 (1.21×) | 52.8 / 67.5 (1.28×) |
+| 100 | 0.122 / 0.156 (1.28×) | 0.0104 / 0.0108 (1.04×) | 1.03 / 1.11 (1.08×) | 186.4 / 214.4 (1.15×) |
+
+No engine column exceeds 1.5×. Above 1.2× (4p at `N_keep` = 25 and 50, 2p
+and 3p at single entries): the remaining cost is a fixed cost per block, not
+per flop. With K and D as separate tagged sectors, a label block of the
+pre-refactor layout is up to four blocks, each stored under a key of two
+`LegSector`s; the declared kernels look blocks up through `block_view`
+(a hashed tuple key instead of one label), composites are built as kept-leg
+tensors (`kk_tensor`, with the block rule checked per block), and refined
+slices are collected in `SlicedTensor`s. The ratio falls with `N_keep`
+(4p: 1.40 → 1.28 → 1.15) as the products start to dominate, so production
+runs (`N_keep` ≥ 100) pay ≲ 15 %. The 2p entries are milliseconds. The
+sweep (not an engine column) is 1.3–1.4× at 0.1 s: divide-and-conquer
+`eigen` (finding R5b) and the construction of the rank-3 isometries and
+plans. The sheet's alternative for a measurable slowdown — untagged
+sectors with K-first index ranges (Sec. 4.2) — was not needed. The 4p cost
+counters agree except 631,559 vs 631,569 slice refinements at
+`N_keep = 100`, ten slices out of 6.3e5; not investigated further,
+presumably composite slices whose blocks cancel to exact zeros in one
+summation order and not in the other (such slices carry no weight; results
+are compared by the baseline, where every row passes).
 
 ## Phase log
 

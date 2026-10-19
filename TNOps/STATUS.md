@@ -15,26 +15,27 @@ refactored onto.
 
 ## Verification record
 
-Tests: `julia -t 4 --project=TNOps/test TNOps/test/runtests.jl` — **2354
-assertions, all passing** (R4: `retag` of a tensor leg added). Every operation is checked against the same
+Tests: `julia -t 4 --project=TNOps/test TNOps/test/runtests.jl` — **2352
+assertions, all passing** (R6; 2354 at R4–R5, see decision 7 for why the
+count of the random contraction tests changed). Every operation is checked against the same
 operation on `todense` arrays to 1e-13 relative, for random tensors of rank
 1–5 with 2–5 sectors per leg (tagged and untagged), random fluxes, the
 symmetries U1×U1×Z2, Z3 (×Pf) and parity only, real and complex elements;
 the random seeds are fixed integers (an earlier version seeded with
-`hash(name)` and its assertion count varied between runs). Achieved (notebook `notebooks/tnops_checks.ipynb`, largest deviation):
+`hash(name)` and its assertion count varied between runs). Achieved (notebook `notebooks/tnops_checks.ipynb`, re-executed in R6 on the final code, largest deviation):
 
 | Check | Achieved |
 |:--|:--|
 | `fromdense(todense(A)) == A`; stored forbidden blocks | 0; none (90 tensors) |
-| `+`, `-`, scalar `*`, `conj`, `norm`, `dot` vs dense | 4.0e-16 |
+| `+`, `-`, scalar `*`, `conj`, `norm`, `dot` vs dense | 3.7e-16 |
 | `permute` vs `permutedims` | 0 |
 | `contract` (ranks 1–4, 0–2 pairs) vs explicit loops; forbidden output blocks | 3.1e-16; none (90 contractions) |
-| `ncon` (three tensors, explicit order) vs explicit loops | 2.4e-16 |
+| `ncon` (three tensors, explicit order) vs explicit loops | 1.4e-16 |
 | `tr` (rank 2, partial) vs dense | 1.0e-16 |
 | `split_legs(fuse_legs(A)) - A` | 0 |
 | `fusionmap` vs the frozen pre-refactor `fusionmap` (252 pairs, 6 shells) | identical (order and offsets) |
 | `kron_fused` vs the frozen pre-refactor `kron_op` (54 blocks) | bit-identical |
-| `eigen` (rank 2; rank-4 partition) reconstruction | 2.4e-15; 1.9e-15 |
+| `eigen` (rank 2; rank-4 partition) reconstruction | 6.8e-16; 1.1e-15 |
 | `svd`, `qr` (rank 2 with flux; rank-3 partition) reconstruction | ≤ 2.6e-15 |
 | `global_cut` vs the frozen `truncate_shell` (20 spectra of the 4 baseline runs) | kept counts and records identical |
 | `apply_parity`, `parity_tensor` vs the dense parity matrix | 0 |
@@ -63,11 +64,18 @@ literals (TNOps has no JLD2).
    fixed.) The bond legs are untagged.
 4. **`In` and `Out` in IJulia** are the notebook's cell history in `Main` and
    shadow the exported arrows; notebooks write `TNOps.In` / `TNOps.Out`.
-5. **Legacy layer.** Until MultipointNRG is ported (R5), the pre-refactor
-   `SectorSpace`, `BlockOp`, `SlicedBlockOp`, `fusionmap(::SectorSpace, …)` and
-   `kron_op` live unchanged in `src/legacy.jl`; the old `FusionMap` /
-   `FusionPair` are renamed `OldFusionMap` / `OldFusionPair` there so that the
-   generic fusion takes the names. `legacy.jl` is removed in R6.
+5. **Legacy layer, then compatibility names.** Until MultipointNRG was ported
+   (R1–R5), the pre-refactor `SectorSpace`, `BlockOp`, `SlicedBlockOp`,
+   `fusionmap(::SectorSpace, …)` and `kron_op` lived unchanged in
+   `src/legacy.jl` (the old fusion types renamed `OldFusionMap` /
+   `OldFusionPair`). R6 removed it; `src/compat.jl` keeps the names as aliases
+   and thin wrappers: `SectorSpace === Leg` (an untagged `Out` leg from a
+   label ⇒ dimension dictionary), `BlockOp{T,S} = BlockTensor{T,2,S}` with the
+   constructor `BlockOp{T}(row, col, Δ)` and the old 4-argument form,
+   `SlicedBlockOp{T,S,Kt} = SlicedTensor{Kt,T,2,S}`, `mapslices_op = mapslices`,
+   `blockeigen` / `blocksvd` (per label, returning the old dictionaries),
+   `identity_op = identity_tensor`, `kron_op = kron_fused`. The V1a/V1b tests
+   moved from mpNRG run unchanged on them.
 6. **`eigen` uses the divide-and-conquer driver** (`LAPACK.syevd!`, through
    `eigen(H; alg = LinearAlgebra.DivideAndConquer())` where available), not
    Julia's default MRRR driver (`syevr`). Found in R5b: the eigenvectors MRRR
@@ -77,6 +85,23 @@ literals (TNOps has no JLD2).
    equal matrix, gave 2.7e-14). QR (`syev`) and divide-and-conquer give
    ~5e-15 on the same matrix; with divide-and-conquer the largest deviation
    over the test is 1.1e-14. No tolerance was changed.
+7. **Content hashes for `Sector`, `LegSector` and `Arrow`.** Julia's default
+   hash of a struct value (and of an enum) mixes in the identity of its type,
+   which differs between builds (the same source compiled with other code
+   loaded): `hash(LegSector(q, 0))` was found to differ between the R5b and the
+   R6 builds. Every block dictionary of a tensor is keyed by such sectors, so
+   iteration orders — and with them the order in which contractions add
+   contributions, hence the round-off — depended on unrelated code. The same
+   mechanism in mpNRG's operator algebra caused the R5c finding
+   (`mpNRG/STATUS.md`); it probably also explains the unidentified
+   rounding-level offset of the first R1 comparison. With content hashes the
+   order is the same in every build. A side effect: the random legs of the
+   contraction tests were built by collecting a `Set` of sectors, so their
+   composition, and the assertion count (2354 → 2352), depended on the build;
+   the test now sorts the sectors first.
+8. **`setslice!` compares legs by identity first** (then by value): slices
+   produced by one contraction share their leg objects, and the value
+   comparison of sector vectors showed up in the PSF engine's profile.
 
 ## Phase log and pushes
 
@@ -95,3 +120,7 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R5c | mpNRG `operators/` on TNOps tensors; content hashes for `Mode`/`Ladder` (finding in `mpNRG/STATUS.md`) | `1c225feb59fc9a6017c8162903e72d1d10428aef` |
 | R5d | mpNRG FDM backward sweep on TNOps tensors | `9aad3f41275184579066dbf3c862b998cd2fb7ad` |
 | R5e | mpNRG PSF engine on `SlicedTensor`s and `block_view` | `e7f9f68f4f6bb5dd076fb5c171df0ac9b9101f66` |
+| R5f | mpNRG hooks on tensor objects; grep test for block access | `ed7ba5438a3b3291e8199ddaf24eac76cbfd275c` |
+| R6a | `legacy.jl` replaced by `compat.jl`; content hashes (decision 7); mpNRG README changes, `timing_compare.jl` | `0c10fe1962959f9ed19d3859cbad6282910c8e1f` |
+| R6b | mpNRG `RefinePlan` (engine performance, `mpNRG/STATUS.md`); cheaper hashes; `setslice!` identity check (decision 8) | `4cf33a3f15beb35f283454c1b58e2493ab7ae917` |
+| R6c | mpNRG `timing_compare.jl`: minimum over repetitions after a full GC | `839b151bd9a0d5bc2283424b47806aa71546eb39` |
