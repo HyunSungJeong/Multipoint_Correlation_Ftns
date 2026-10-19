@@ -128,7 +128,8 @@ A separate Julia package, `MultipointNRG` in [`mpNRG/`](mpNRG/README.md): full-d
 and 4p PSFs following Lee, Kugler & von Delft, [PRX **11**, 041007 (2021)](https://doi.org/10.1103/PhysRevX.11.041007),
 with the PSF convention of Eq. (28) here. Its `src/` does not depend on `HubbardAtom`; the tests use `HubbardAtom` as an
 independent reference, and PSFs export to its kernels. Verification record, deviations and open issues:
-[`mpNRG/STATUS.md`](mpNRG/STATUS.md). Tests: `julia --project=mpNRG/test mpNRG/test/runtests.jl` (2897 assertions).
+[`mpNRG/STATUS.md`](mpNRG/STATUS.md). Tests: `julia --project=mpNRG/test mpNRG/test/runtests.jl` (1966 assertions
+since the TNOps refactor, which moved the generic tensor tests to `TNOps/test`; 2897 before).
 
 | Sheet | Item | Check | Accuracy |
 |:--|:--|:--|:--|

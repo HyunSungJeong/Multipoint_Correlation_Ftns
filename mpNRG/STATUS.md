@@ -226,6 +226,38 @@ presumably composite slices whose blocks cancel to exact zeros in one
 summation order and not in the other (such slices carry no weight; results
 are compared by the baseline, where every row passes).
 
+**Verification record re-confirmed (R6e).** `notebooks/mpnrg_validation.ipynb`
+was rebuilt with `build_notebook.py` and re-executed on the refactored code
+(Julia 1.13.0, 4 threads, 17 min; every code cell has outputs, no errors) and
+its PDF regenerated the same way as before (nbconvert HTML with local
+MathJax, printed by headless Chromium); the figures in
+`notebooks/figures/mpnrg/` were rewritten by the run. Every printed accuracy
+agrees with the record below up to round-off: the exactness items (V1–V4,
+export) stay at the 1e-15–1e-14 level, now V1d 1.3e-15 / 3.4e-14 / 1.1e-14,
+V3a 5.1e-15 / 2.1e-14, V3b 2.2e-15 / 4.5e-14, V3c (binned / exact) 9.5e-15 /
+1.8e-14, 3.0e-15 / 1.3e-14, 4.7e-15 / 2.9e-14, atom limit 1.1e-15, V4a
+7.3e-15, V4b 1.8e-15, V4c 3.2e-15, V4d 3.0e-14, V6a 3.6e-15 / 4.3e-18, V6b
+3.3e-15, V6c at `N_keep` ≥ 256 9.9e-15 (2p) / 1.3e-14 (3p), V7 `⟨n_d⟩ - 1`
+-3.4e-15, export 1.2e-14; the physics items are unchanged in every printed
+digit (V5 0.344 / 0.125; V6c 0.29, 0.076, 0.040, 5.4e-3, 7.2e-4; V7 1.3814,
+0.6831, 1.06e-5, 0.2068, 0.995 / 0.956; V8 below). The section "Refactor
+regression (TNOps)" prints the baseline table (all rows pass, kept counts
+identical, no bin flips) and the timing comparison above.
+
+**V8 re-run (R6e).** The dataset is still in `refs/lmu613/`, so V8 was
+re-run in full with the refactored code: the cached parts of
+`scripts/v8_benchmark.jl` were moved aside first, all 2p, totals and 96 4p
+PSFs recomputed (1 h 34 min, 4 threads), and `v8_results.jld2` rewritten.
+Every number in it agrees with the pre-refactor file to 3.3e-14 absolute
+(the largest relative differences, 1e-10, are in the σσ marginals, which
+cancel to 4e-16). `test/test_v8_external.jl` passes (13 assertions), and
+the notebook's V8 section prints the record's values (2p bins 7–15 %;
+marginals 10.8 %; σσ 1.8e-3; 2p combination 9.8 %).
+
+**Examples.** All five `examples/*.jl` run unchanged on the refactored code
+(they use only the public API); e.g. `siam.jl`: 4p total 0.13710421934297
+vs FDM sum rule 0.13710421934341.
+
 ## Phase log
 
 | Phase | Content | Commit |
@@ -326,7 +358,10 @@ per item) and the `@info` lines of the tests. The tests assert the exactness
 items (V1–V4) at 1e-12 to 1e-10 depending on the quantity (each tolerance is
 stated at its assertion in `test/`), the physics items (V5–V8) at the
 tolerances quoted in the findings below. Full suite: **2897 assertions, all passing** (Julia 1.13.0,
-16 min on 2 threads; V8 is skipped without the dataset).
+16 min on 2 threads; V8 is skipped without the dataset). After the TNOps refactor (R6): **1966
+assertions in `mpNRG/test`, all passing** (9 min on 4 threads, with V8 and the regression baseline),
+plus **2352 in `TNOps/test`**, where the generic V1a/V1b checks moved; the numbers below were
+re-confirmed by the re-executed notebook (R6e, refactor section above).
 
 | Item | Check | Achieved |
 |:--|:--|:--|
