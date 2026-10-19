@@ -11,12 +11,17 @@
 # Each code version is measured in a fresh process (this script with
 # `--measure out.jld2`, run in the project of that version), after a small
 # warm-up run that compiles every code path, so that compilation is not timed.
+# Every timed call starts after a full garbage collection, and the time is the
+# minimum over REPS repetitions (sweep and 2p: 5, 3p: 3, 4p: 1), so that the
+# short calls are not dominated by a collection pause or the first projection
+# of the operators (cached after the first call, as in the notebook).
 # The worktree is created if it does not exist (default: a directory next to
 # the repository) and left in place.
 
 using JLD2, Printf
 
 const NKEEP = (25, 50, 100)
+const REPS = (sweep = 5, psf = (5, 3, 1))
 const MEASURE = length(ARGS) ≥ 2 && ARGS[1] == "--measure"
 MEASURE && @eval using MultipointNRG          # the version of the project this process runs in
 
@@ -33,16 +38,25 @@ function measure(out::AbstractString)
     end
     sweep = Float64[]; tp = zeros(3, length(NKEEP)); costs = Any[]
     for (j, Nk) in enumerate(NKEEP)
-        t0 = time(); run = M.run_nrg(m, M.NRGParams(N = N, Nkeep = Nk)); push!(sweep, time() - t0)
+        p = M.NRGParams(N = N, Nkeep = Nk)
+        ts = Float64[]; run = nothing
+        for _ in 1:REPS.sweep
+            GC.gc(); t0 = time(); run = M.run_nrg(m, p); push!(ts, time() - t0)
+        end
+        push!(sweep, minimum(ts))
         f = M.fdm(run; T = T)
         for (i, ops) in enumerate(opsets)
-            r = M.psf(run, f, ops; grid = g)
-            tp[i, j] = r.meta[:time]
+            ts = Float64[]; r = nothing
+            for _ in 1:REPS.psf[i]
+                GC.gc(); r = M.psf(run, f, ops; grid = g); push!(ts, r.meta[:time])
+            end
+            tp[i, j] = minimum(ts)
             i == 3 && push!(costs, Dict(String(k) => v for (k, v) in r.meta[:cost]))
         end
         @printf("  Nkeep %4d: sweep %.2f s, 2p %.2f s, 3p %.2f s, 4p %.1f s\n", Nk, sweep[end], tp[:, j]...)
     end
-    jldsave(out; sweep, psf = tp, costs, N, nkeep = collect(NKEEP), threads = Threads.nthreads())
+    jldsave(out; sweep, psf = tp, costs, N, nkeep = collect(NKEEP), threads = Threads.nthreads(),
+            reps = [REPS.sweep, REPS.psf...])
 end
 
 function main(args)
