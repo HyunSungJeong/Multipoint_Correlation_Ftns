@@ -141,3 +141,28 @@ end
     end
     @test norm(sort(reduce(vcat, values(E))) - eigvals(Hermitian(Hd))) ≤ 1e-12
 end
+
+@testset "no block dictionaries outside nrg/tensors.jl and the declared kernels (Sec. 4.1, 4.4)" begin
+    src = normpath(joinpath(@__DIR__, "..", "src"))
+    # the declared dense kernels of psf/engine.jl (listed at the top of that file)
+    kernels = ("shell_trace!", "_trace_step!", "_composite_left", "_comp_left_step!", "_addrow!",
+               "_composite_right", "_comp_right_step!", "_addcol!")
+    hits = String[]
+    nfiles = 0
+    for (dir, _, files) in walkdir(src), f in files
+        endswith(f, ".jl") || continue
+        path = joinpath(dir, f); rel = relpath(path, src)
+        nfiles += 1
+        rel == joinpath("nrg", "tensors.jl") && continue
+        fn = ""                                   # the top-level function the line belongs to
+        for (i, line) in enumerate(eachline(path))
+            m = match(r"^function\s+([A-Za-z_][A-Za-z_0-9!]*)", line)
+            m === nothing || (fn = m.captures[1])
+            occursin(".blocks", line) && !(rel == joinpath("psf", "engine.jl") && fn in kernels) && push!(hits, "$rel:$i")
+            line == "end" && (fn = "")
+        end
+    end
+    @test nfiles ≥ 15                         # the walk did see the package
+    @test isempty(hits)
+    isempty(hits) || @info "block dictionaries accessed at" hits
+end

@@ -18,11 +18,11 @@ One sliced composite operator being carried at shell `n`:
   - `tags`: for each original frequency εᵢ, whether it is sliced in this
     operator (`1` measured from state 1, `2` from the operator's left
     endpoint, `0` not sliced here);
-  - `slices`: `Dict(slice key => BlockOp)`, the open bin legs. Each `BlockOp`
-    lives on the full space of shell `n` (rows and columns per symmetry block,
-    K states first, then D states), with the composite's symmetry shift; the
-    slice key is a tuple over the original frequencies with bin indices (or
-    exact energies in exact mode) in the sliced slots.
+  - `slices`: a TNOps `SlicedTensor` (slice key => rank-2 `BlockTensor`), the
+    open bin legs. Each slice lives on the shell leg of shell `n` (rows and
+    columns), with the composite's symmetry shift as flux; the slice key is a
+    tuple over the original frequencies with bin indices (or exact energies
+    in exact mode) in the sliced slots.
 """
 struct CarriedComposite
     born::Int
@@ -39,18 +39,26 @@ end
 Read-only view of the internals at shell `n` of a PSF forward sweep, passed to
 every hook as `callback(run, n, ctx)`:
 
-  - `isometries(ctx)`: `Dict(sector => A)` of shell `n` (Lee Eq. (15); rows in
-    the product basis of the shell's fusion map, `fusionmap(ctx)`);
+  - `isometries(ctx)`: the isometry `A^n` of shell `n` (Lee Eq. (15)), a
+    rank-3 `BlockTensor` with legs (old, site, new): the kept leg of shell
+    `n-1`, the local leg of site `n`, the shell leg of shell `n` (rank 2,
+    (site, new), at `n = -1`); `fusionmap(ctx)` is the TNOps `FusionMap` of
+    its product basis (site outer, kept states of `n-1` inner);
   - `rhoKK(ctx)`: `ρ̄^n_{KK}` (Lee Eq. (45)), a tensor on the kept leg of shell `n`;
   - `call_operators(ctx)`: the sector-projected operators `O^n` of the call
-    (top-level local operators, one `BlockOp` each);
+    (top-level local operators, one rank-2 `BlockTensor` each);
   - `refinement_map(ctx)`: the function `O -> O^n` mapping a KK operator of
     shell `n-1` into all sectors of shell `n` (Lee Eq. (34));
   - `carried(ctx)`: the [`CarriedComposite`](@ref)s being carried at shell `n`.
 
-Memory layout: every operator is a `BlockOp` keyed by column sector; within a
-sector the states of the shell are ordered K first (`krange`) then D
-(`drange`). Nothing may be mutated.
+Memory layout: every operator is a rank-2 TNOps `BlockTensor` (legs: row
+`Out`, column `In`; flux = symmetry shift). The shell leg of shell `n` holds,
+for every symmetry label `q`, the tagged sectors `(q, K)` (tag 1, `nkept`
+states) and `(q, D)` (tag 2, `ndisc` states); blocks are keyed by pairs of
+tagged sectors, so the KK, KD, DK and DD parts of a label block are separate
+blocks. `getblock(O, q)` assembles the full label block of column label `q`
+(K states first, then D: the pre-refactor layout, `krange`/`drange`), and
+`block_view(O, q, X, X̄)` returns one tagged block. Nothing may be mutated.
 """
 struct ShellContext
     n::Int

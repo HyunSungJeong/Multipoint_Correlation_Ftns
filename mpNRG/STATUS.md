@@ -118,6 +118,7 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R5c | `operators/`: `shell_operator`, `refine` (= `refine_KK` with the shell isometry), `project` return TNOps tensors, `sector_view` = `block_view`; content hashes for `Mode`/`Ladder` (finding below); the PSF engine still on the pre-refactor operators through a temporary bridge `psf/legacy_bridge.jl` | see `TNOps/STATUS.md` |
 | R5d | `fdm/`: the backward sweep is `backward_step` on `rho_full` per shell, `ρ̄^n_{KK}` a tensor on the kept leg (`rhoK(f, n)`); `shell_trace` and `fdm_checks` on tensors; the pre-refactor views of the isometry are removed from `Shell` | see `TNOps/STATUS.md` |
 | R5e | `psf/`: carried operators are `SlicedTensor`s of shell tensors, composites `kk_tensor`s on the kept leg, refinement `mapslices` of `refine`; the declared dense kernels (listed at the top of `psf/engine.jl`) read blocks only through `block_view`; the temporary bridge is deleted | see `TNOps/STATUS.md` |
+| R5f | `hooks/`: docstrings and memory-layout paragraph for the tensor objects, `CarriedComposite.slices` a `SlicedTensor`, `SingularValueRecorder` per label block; `observables/`, `io/` and `psf/api.jl` needed no change beyond R5e; the grep test of Sec. 4.1 in `test_nrg_tensors.jl` (no `.blocks` in `mpNRG/src` outside `nrg/tensors.jl` and the declared kernels; checked to flag a planted occurrence and to exempt the kernels) | see `TNOps/STATUS.md` |
 
 **Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
 With the sweep on TNOps tensors, V1d failed one assertion: the shell-2

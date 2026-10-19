@@ -94,3 +94,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R5b | mpNRG forward sweep on TNOps tensors (rank-3 isometries, K/D tags); TNOps `eigen` on divide-and-conquer (decision 6) | `138a7cdc40c80fd99b8dd9ab529ab451b9b6d8d2` |
 | R5c | mpNRG `operators/` on TNOps tensors; content hashes for `Mode`/`Ladder` (finding in `mpNRG/STATUS.md`) | `1c225feb59fc9a6017c8162903e72d1d10428aef` |
 | R5d | mpNRG FDM backward sweep on TNOps tensors | `9aad3f41275184579066dbf3c862b998cd2fb7ad` |
+| R5e | mpNRG PSF engine on `SlicedTensor`s and `block_view` | `e7f9f68f4f6bb5dd076fb5c171df0ac9b9101f66` |
