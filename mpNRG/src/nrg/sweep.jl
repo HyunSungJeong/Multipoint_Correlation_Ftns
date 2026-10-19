@@ -63,9 +63,7 @@ Data of Wilson shell `n` (Lee Sec. III A), per symmetry block:
     new) — rank 2 (site, new) at n = -1 —, `Adag` its adjoint (`nrg/tensors.jl`);
   - `loc`: the local space of site `n`;
   - `F`: the annihilators `f_{nν}` of site `n` in the shell-`n` basis (all
-    states, rank-2 tensors on `leg`), needed for the hopping to site `n+1`;
-  - `legacy`: temporary views in the pre-refactor layout for modules not yet
-    ported (refactor steps R5b-R5d; removed afterwards).
+    states, rank-2 tensors on `leg`), needed for the hopping to site `n+1`.
 """
 struct Shell{S<:Sector,T<:Number}
     n::Int
@@ -80,7 +78,6 @@ struct Shell{S<:Sector,T<:Number}
     loc::LocalSpace{S}
     F::Vector{BlockTensor{T,2,S}}
     info::Dict{Symbol,Any}
-    legacy::Dict{Symbol,Any}
 end
 
 nkept(sh::Shell, q) = get(sh.nkeep, q, 0)
@@ -94,12 +91,6 @@ drange(sh::Shell, q) = (nkept(sh, q) + 1):dim(sh.space, q)
 xrange(sh::Shell, q, X::Symbol) = X === :K ? krange(sh, q) : drange(sh, q)
 totalkept(sh::Shell) = sum((degeneracy(q) * nkept(sh, q) for q in sectors(sh.space)); init = 0)
 totaldisc(sh::Shell) = dim(sh.space) - totalkept(sh)
-
-# temporary (R5b-R5d): the isometry in the pre-refactor layout (Dict of
-# matrices, rows the product basis, K columns first) and the pre-refactor
-# fusion map, for the modules that are not yet ported
-legacy_A(sh::Shell) = sh.legacy[:A]
-legacy_fusion(sh::Shell) = sh.legacy[:fusion]
 
 """
     NRGRun
@@ -241,10 +232,7 @@ function _make_shell(n, res, nk::Dict{S}, shift, Fu, A, loc::LocalSpace{S}, Fs::
                      Adag = isometry_adjoint(A)) where {S,T}
     leg = TNOps.witharrow(TNOps.leg(A, ndims(A)), Out)
     E = res[:Erel]; space = res[:space]
-    U = isometry_matrix(A, Fu)
-    legacy = Dict{Symbol,Any}(:A => Dict{S,Matrix{T}}(q => getblock(U, q) for q in sectors(space)))
-    prev === nothing || (legacy[:fusion] = fusionmap(localspace_sectors(loc), keptspace(prev)))
-    return Shell{S,T}(n, space, leg, Dict{S,Int}(nk), E, shift, Fu, A, Adag, loc, Fs, info, legacy)
+    return Shell{S,T}(n, space, leg, Dict{S,Int}(nk), E, shift, Fu, A, Adag, loc, Fs, info)
 end
 
 energy_scale_param(m::ImpurityModel, p::NRGParams, n::Integer) = _bandD(m) * p.Λ^(-(n - 1) / 2)

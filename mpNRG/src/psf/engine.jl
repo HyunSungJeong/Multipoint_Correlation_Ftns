@@ -267,7 +267,7 @@ function shell_trace!(ctx::EngineCtx, t::PSFTask{T,S,L,V}, X) where {T,S,L,V}
         end
         ok || continue
         Es = [sh.E[qs[i]][rr[i]] for i in 1:m]
-        ρ = X[1] === :K ? rhoK(f, n)[q1] : nothing
+        ρ = X[1] === :K ? getblock(rhoK(f, n), q1) : nothing
         ρd = X[1] === :D ? rhoD(f, n)[q1] : nothing
         F0 = ntuple(_ -> zero(V), Val(L))
         for (k1, M1) in t.ops[1].slices

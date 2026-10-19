@@ -33,7 +33,7 @@ end
 skey(q) = q.q                                  # sector label as a plain tuple
 
 # ρ̄^n_KK as sector => dense matrix (pre-refactor: a Dict of matrices)
-bl_rhoK_blocks(f, n) = rhoK(f, n)
+bl_rhoK_blocks(f, n) = Dict(q => getblock(rhoK(f, n), q) for q in sectors(rhoK(f, n).row))
 
 function bl_shells(run)
     out = Dict{String,Any}()

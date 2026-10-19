@@ -41,7 +41,7 @@ every hook as `callback(run, n, ctx)`:
 
   - `isometries(ctx)`: `Dict(sector => A)` of shell `n` (Lee Eq. (15); rows in
     the product basis of the shell's fusion map, `fusionmap(ctx)`);
-  - `rhoKK(ctx)`: `Dict(sector => ρ̄^n_{KK})` (Lee Eq. (45));
+  - `rhoKK(ctx)`: `ρ̄^n_{KK}` (Lee Eq. (45)), a tensor on the kept leg of shell `n`;
   - `call_operators(ctx)`: the sector-projected operators `O^n` of the call
     (top-level local operators, one `BlockOp` each);
   - `refinement_map(ctx)`: the function `O -> O^n` mapping a KK operator of

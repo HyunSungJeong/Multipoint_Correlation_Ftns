@@ -116,6 +116,7 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R5a | `fock/` (`localop`, `parity_op` are tensors on the site leg) and `reference/ed.jl` (ED operators as tensors; ED PSFs and averages stay dense) | `02f2d10` |
 | R5b | forward sweep on TNOps tensors: rank-3 `A^n` with K/D-tagged legs, `diagonalize_shell`, `global_cut` truncation, `lift_site` for `F`; temporary pre-refactor views for `operators/` and `fdm/`; TNOps `eigen` on the divide-and-conquer driver (finding below) | see `TNOps/STATUS.md` |
 | R5c | `operators/`: `shell_operator`, `refine` (= `refine_KK` with the shell isometry), `project` return TNOps tensors, `sector_view` = `block_view`; content hashes for `Mode`/`Ladder` (finding below); the PSF engine still on the pre-refactor operators through a temporary bridge `psf/legacy_bridge.jl` | see `TNOps/STATUS.md` |
+| R5d | `fdm/`: the backward sweep is `backward_step` on `rho_full` per shell, `ρ̄^n_{KK}` a tensor on the kept leg (`rhoK(f, n)`); `shell_trace` and `fdm_checks` on tensors; the pre-refactor views of the isometry are removed from `Shell` | see `TNOps/STATUS.md` |
 
 **Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
 With the sweep on TNOps tensors, V1d failed one assertion: the shell-2

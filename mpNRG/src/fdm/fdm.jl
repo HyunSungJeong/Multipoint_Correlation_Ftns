@@ -12,7 +12,8 @@ The full density matrix of a run at temperature `temp` (Lee Eqs. (40)-(45)):
     von Delft (2007) Eq. (8) / Lee Eq. (44); `Σ_n w_n = 1`;
   - `rhoD[n+2][q]`: the diagonal of `ρ̄^n_{DD}`, Lee Eq. (44),
     `w_n e^{-βE^n_s}/Z_n^D`;
-  - `rhoK[n+2][q]`: `ρ̄^n_{KK}`, from the backward sweep Lee Eq. (45).
+  - `rhoK[n+2]`: `ρ̄^n_{KK}`, a tensor on the kept leg of shell `n`, from the
+    backward sweep Lee Eq. (45) ([`backward_step`](@ref)).
 
 `d^{N-n}` is the dimension of the environment (sites `> n`), counted through
 [`degeneracy`](@ref). Approximation: the NRG approximation Lee Eq. (19)
@@ -26,7 +27,7 @@ struct FDM{S<:Sector,T<:Number}
     w::Vector{Float64}
     logdenv::Vector{Float64}
     rhoD::Vector{Dict{S,Vector{Float64}}}
-    rhoK::Vector{Dict{S,Matrix{T}}}
+    rhoK::Vector{BlockTensor{T,2,S}}
     info::Dict{Symbol,Any}
 end
 
@@ -45,8 +46,8 @@ backward sweep from `N` down to `-1`, `ρ̄^n_{KK}` (Lee Eq. (45)):
 
     ρ̄^n_{KK} = Σ_X M^{σ_{n+1}}_{KX} ρ̄^{n+1}_{XX} M^{σ_{n+1} †}_{XK} ,
 
-the partial trace over site `n+1` of the shell-(n+1) reduced density matrix,
-done per pair of the fusion map.
+the partial trace over site `n+1` of the shell-(n+1) reduced density matrix
+([`backward_step`](@ref) on the full shell-(n+1) matrix [`rho_full`](@ref)).
 """
 function fdm(run::NRGRun{S,Tm}; T::Real) where {S,Tm}
     Tt = Float64(T)
@@ -80,29 +81,11 @@ function fdm(run::NRGRun{S,Tm}; T::Real) where {S,Tm}
         rD[sh.n + 2][q] = exp.(logdenv[sh.n + 2] .- β .* (sh.E[q][drange(sh, q)] .+ sh.shift .- Eref) .- logZ)
     end
     # backward sweep for ρ̄_KK
-    rK = [Dict{S,Matrix{Tm}}() for _ in shells]
+    rK = [kk_tensor(kept_leg(sh.leg), neutral(S), Dict{S,Matrix{Tm}}(), Tm) for sh in shells]
     for n in (N - 1):-1:-1
-        sh1 = shell(run, n + 1); sh = shell(run, n)
-        Fu = legacy_fusion(sh1)       # temporary (R5b): pre-refactor layout
-        acc = Dict{S,Matrix{Tm}}(q => zeros(Tm, nkept(sh, q), nkept(sh, q)) for q in sectors(sh.space) if nkept(sh, q) > 0)
-        for (qq, prs) in Fu.pairs
-            A = legacy_A(sh1)[qq]
-            kq = nkept(sh1, qq)
-            ρfull = zeros(Tm, size(A, 2), size(A, 2))
-            kq > 0 && (ρfull[1:kq, 1:kq] .= rK[n + 3][qq])
-            if ndisc(sh1, qq) > 0
-                d = rD[n + 3][qq]
-                for (i, j) in enumerate(drange(sh1, qq))
-                    ρfull[j, j] = d[i]
-                end
-            end
-            for pr in prs, iσ in 1:pr.dσ
-                rows = pr.offset + (iσ - 1) * pr.dq .+ (1:pr.dq)
-                Ar = view(A, rows, :)
-                acc[pr.q] .+= Ar * ρfull * Ar'
-            end
-        end
-        rK[n + 2] = acc
+        sh1 = shell(run, n + 1)
+        ρ = rho_full(sh1.leg, rK[n + 3], rD[n + 3], Tm)
+        rK[n + 2] = convert_eltype(Tm, _onlegs(backward_step(sh1.A, sh1.Adag, ρ), kept_leg(shell(run, n).leg)))
     end
     f = FDM{S,Tm}(Tt, β, Eref, logZ, w, logdenv, rD, rK, Dict{Symbol,Any}())
     f.info[:checks] = fdm_checks(run, f)
@@ -128,14 +111,14 @@ function fdm_checks(run::NRGRun, f::FDM)
     λmin = Inf; kkdev = 0.0
     for n in -1:N
         sh = shell(run, n)
-        for (q, M) in rhoK(f, n)
+        for (k, M) in eachblock(rhoK(f, n))
             isempty(M) && continue
             λmin = min(λmin, eigmin(Hermitian((M + M') / 2)))
         end
         for (q, d) in rhoD(f, n)
             λmin = min(λmin, minimum(d))
         end
-        trK = sum((degeneracy(q) * real(tr(M)) for (q, M) in rhoK(f, n)); init = 0.0)
+        trK = sum((degeneracy(k[1].label) * real(tr(M)) for (k, M) in eachblock(rhoK(f, n))); init = 0.0)
         later = sum(f.w[(n + 3):end]; init = 0.0)
         kkdev = max(kkdev, abs(trK - later))
     end
@@ -153,7 +136,7 @@ function rho_full(f::FDM{S,T}, run::NRGRun, n::Integer, q) where {S,T}
     d = dim(sh.space, q)
     M = zeros(T, d, d)
     k = nkept(sh, q)
-    k > 0 && haskey(rhoK(f, n), q) && (M[1:k, 1:k] .= rhoK(f, n)[q])
+    k > 0 && (M[1:k, 1:k] .= getblock(rhoK(f, n), q))
     if ndisc(sh, q) > 0
         for (i, j) in enumerate(drange(sh, q))
             M[j, j] = rhoD(f, n)[q][i]
