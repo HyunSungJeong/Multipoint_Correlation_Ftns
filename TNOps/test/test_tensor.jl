@@ -51,7 +51,7 @@ relerr(a, b) = norm(a - b) / max(norm(b), 1e-300)
 end
 
 @testset "BlockTensor vs dense: $gname" for (gname, G, gen) in GROUPS
-    rng = MersenneTwister(hash(gname))
+    rng = MersenneTwister(sum(codeunits(gname)))
     for N in 1:5, T in (Float64, ComplexF64)
         dmax = N ≤ 3 ? 3 : 2
         ls = ntuple(_ -> randleg(rng, G, gen; dmax = dmax), N)
@@ -107,7 +107,7 @@ function dense_contract(DA, ia, DB, ib)
 end
 
 @testset "contract, outer, tr vs explicit loops: $gname" for (gname, G, gen) in GROUPS
-    rng = MersenneTwister(7 + hash(gname))
+    rng = MersenneTwister(7 + sum(codeunits(gname)))
     for trial in 1:12, T in (Float64, ComplexF64)
         NA = rand(rng, 1:4); NB = rand(rng, 1:4)
         nc = rand(rng, 0:min(NA, NB, 2))
@@ -136,7 +136,7 @@ end
     A = randtensor(rng, Float64, (l1, l2), randflux(rng, (l1, l2)))
     @test_throws ArgumentError contract(A, (1,), A, (1,))            # same arrow: not dual
     err = try contract(A, (2,), A, (2,)) catch e; e end
-    @test err isa ArgumentError && occursin("leg 2", err.msg)
+    @test err isa ArgumentError && occursin("leg 2", err.msg) && occursin("not dual", err.msg)
     # traces: rank 2 and partial
     l = randleg(rng, G, gen; dmax = 3, arrow = Out)
     H = randtensor(rng, ComplexF64, (l, dual(l)), neutral(labeltype(G)))

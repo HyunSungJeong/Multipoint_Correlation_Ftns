@@ -19,8 +19,12 @@ include("tensor.jl")
 include("sliced.jl")
 include("linalg.jl")
 include("dense.jl")
-include("legacy.jl")
 include("fusion.jl")
+include("factorize.jl")
+include("parity.jl")
+include("ncon.jl")
+include("interface.jl")
+include("legacy.jl")
 
 export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_index, factornames,
        fuse, dual, neutral, isneutral, parity, degeneracy
@@ -29,9 +33,11 @@ export Arrow, In, Out, arrow, LegSector, Leg, legsectors, sectors, dim, offsets,
        BlockTensor, getblock, setblock!, hasblock, blockkeys, eachblock, nblocks, allowed_keys, target,
        randtensor, identity_tensor, subtensor, restrict, convert_eltype,
        SlicedTensor, setslice!, nslices,
-       permute, contract, outer, todense, fromdense
+       permute, contract, outer, todense, fromdense, keyflux,
+       FusionPair, FusionMap, fusionmap, kron_fused, fuse_legs, split_legs,
+       global_cut, parity_tensor, apply_parity, ncon, SYMMETRY_INTERFACE
 # legacy rank-2 layer (until MultipointNRG is ported)
 export SectorSpace, BlockOp, blockeigen, blocksvd, identity_op, SlicedBlockOp, mapslices_op,
-       FusionPair, FusionMap, fusionmap, kron_op
+       OldFusionPair, OldFusionMap, kron_op
 
 end # module

@@ -109,7 +109,9 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | Phase | Content | Commit (pushed) |
 |:--|:--|:--|
 | R0 | baseline, fixtures, old-format file, tag recorded | `debf22a` |
-| R1 | `TNOps/` package with the moved symmetry layer (`git mv`, then the module); mpNRG uses and re-exports it; V1a, V1b moved to `TNOps/test` | see `TNOps/STATUS.md` |
+| R1 | `TNOps/` package with the moved symmetry layer (`git mv`, then the module); mpNRG uses and re-exports it; V1a, V1b moved to `TNOps/test` | `9fb9536` |
+| R2 | TNOps: legs, `BlockTensor`, `SlicedTensor`, contractions, dense maps (mpNRG unchanged, still on the legacy layer) | `268d6ca` |
+| R3 | TNOps: fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook; mpNRG refers to the legacy fusion type as `OldFusionMap` | see `TNOps/STATUS.md` |
 
 ## Phase log
 

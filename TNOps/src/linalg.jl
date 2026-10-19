@@ -146,7 +146,7 @@ end
 function contract(A::BlockTensor{TA,NA,S}, ia::NTuple{NC,Int}, B::BlockTensor{TB,NB,S}, ib::NTuple{NC,Int}) where {TA,NA,TB,NB,S,NC}
     for (x, y) in zip(ia, ib)
         isdual(leg(A, x), leg(B, y)) || throw(ArgumentError(
-            "cannot contract $(_legname(A, x)) $(legstring(leg(A, x))) with $(_legname(B, y)) $(legstring(leg(B, y))): not dual"))
+            "cannot contract leg $x $(legstring(leg(A, x))) of the first tensor with leg $y $(legstring(leg(B, y))) of the second: not dual"))
     end
     allunique(ia) && allunique(ib) || throw(ArgumentError("contracted legs repeat"))
     all(i -> 1 ≤ i ≤ NA, ia) && all(i -> 1 ≤ i ≤ NB, ib) || throw(ArgumentError("contracted leg out of range"))

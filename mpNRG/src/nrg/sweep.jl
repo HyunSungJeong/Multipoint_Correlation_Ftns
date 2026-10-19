@@ -67,7 +67,7 @@ struct Shell{S<:Sector,T<:Number}
     nkeep::Dict{S,Int}
     E::Dict{S,Vector{Float64}}
     shift::Float64
-    fusion::Union{Nothing,FusionMap{S}}
+    fusion::Union{Nothing,OldFusionMap{S}}
     A::Dict{S,Matrix{T}}
     loc::LocalSpace{S}
     F::Vector{BlockOp{T,S}}
@@ -337,7 +337,7 @@ end
 
 # Dense vectors of the shell-(n-1) K states (columns, per sector) on the
 # Fock space of sites n-1..-1, and the product embedding for shell n.
-function _product_embedding(prev::Shell{S,T}, loc::LocalSpace{S}, Fu::FusionMap{S}, Uprev) where {S,T}
+function _product_embedding(prev::Shell{S,T}, loc::LocalSpace{S}, Fu::OldFusionMap{S}, Uprev) where {S,T}
     if prev.n == -1
         # shell -1: columns are impurity eigenvectors on the impurity Fock basis
         Bp = prev.loc.basis
