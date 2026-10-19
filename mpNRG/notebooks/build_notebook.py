@@ -480,7 +480,8 @@ What can be compared: total weights (exact identities), the $\varepsilon_1$ and 
 connected 4p parts (the disconnected terms factorize there into 2p PSFs times totals, so no rebinning is needed), and
 2p histograms after identical binning (we apply 'bary' to our exact-mode positions). Our NRG uses abelian
 U(1)×U(1) symmetries with $N_{\rm keep}$ states (not multiplets), the same $\Lambda$, $N$, $z\in\{\tfrac12,1\}$ and
-Žitko–Pruschke discretization. Results: `scripts/v8_benchmark.jl` → `figures/mpnrg/v8_results.jld2`.
+Žitko–Pruschke discretization. Results: `scripts/v8_benchmark.jl` → `figures/mpnrg/v8_results.jld2`
+(regenerated with the TNOps-refactored code, refactor phase R6; this section only reads that file).
 """)
 
 code(r"""
@@ -617,6 +618,59 @@ for (Nk, tn, ts, cs) in rows
     @printf("%6d %10.2f %10.2f %10.2f %10.2f   %d / %d / %d\n", Nk, tn, ts..., cs[3][:traces], cs[3][:composites], cs[3][:refinements])
 end
 RESULTS["perf"] = rows
+""")
+
+md(r"""
+## Refactor regression (TNOps)
+
+The abelian block-sparse layer was moved into the sibling package `TNOps` and every tensor operation of `mpNRG`
+now goes through the named contractions of `src/nrg/tensors.jl` (refactor sheet `docs/TNOPS_REFACTOR.md`). Two checks
+document that this changed nothing beyond round-off and how it affects the run time:
+
+1. **Baseline comparison** (sheet Sec. 8). `test/baseline/baseline.jld2` holds basis-independent results computed with
+   the code at the tag `pre-tensor-refactor` (`bb8b197`): energies, kept counts and truncation records per shell, FDM
+   weights, $\ln Z$, the spectra of $\bar\rho^n_{KK}$, thermal averages, thermodynamics, binned 2p/3p/4p PSFs (all
+   permutations, a composite $q=[d,H_{\rm int}]$, a complex operator, $|w|$ histograms, the `:left` slicing), exact-mode
+   PSFs and the singular values recorded by `SingularValueRecorder`. Below, every quantity is recomputed with the
+   refactored code (`test/baseline/cases.jl`) and compared with the tolerances fixed in `test/baseline/compare.jl`
+   before the refactor; kept counts must be identical and no weight may move to another bin.
+2. **Timing comparison** (sheet Sec. 9.4). The performance table of the section above, measured on this machine with
+   the same thread count for both versions by `scripts/timing_compare.jl` (the old code from a `git worktree` of the
+   tag, each version in a fresh process after a warm-up run), read from `figures/mpnrg/timing_compare.jld2`.
+""")
+
+code(r"""
+# 1. baseline comparison: recompute every quantity of the baseline with the refactored code
+BLDIR = joinpath(@__DIR__, "..", "test", "baseline")
+module RB end
+Base.include(RB, joinpath(BLDIR, "cases.jl")); Base.include(RB, joinpath(BLDIR, "compare.jl"))
+bl_old = load(joinpath(BLDIR, "baseline.jld2"), "baseline")
+t0 = time(); bl_new = RB.compute_baseline(; verbose = false); tbl = time() - t0
+bl_cmp = RB.compare_baseline(bl_new, bl_old)
+println("baseline cases: ", join(sort(collect(keys(bl_old))), ", "), @sprintf(" (recomputed in %.0f s)", tbl))
+RB.print_comparison(bl_cmp)
+RESULTS["regression"] = all(r.pass for r in values(bl_cmp.rows)) && isempty(bl_cmp.flips) && bl_cmp.kept_identical
+println("all rows pass, kept counts identical, no bin flips: ", RESULTS["regression"])
+""")
+
+code(r"""
+# 2. timing comparison: pre-tensor-refactor vs refactored, same machine and threads
+tc = load(joinpath(FIG, "timing_compare.jld2")); tres = tc["results"]
+to, tn = tres["pre-tensor-refactor"], tres["refactored"]
+@printf("machine: %s, %d hardware threads; %d Julia threads for both; Julia %s\n", tc["cpu"], tc["ncpu"], tc["threads"], tc["julia"])
+println("pre-tensor-refactor at ", to["commit"][1:7], ", refactored at ", tn["commit"][1:7],
+        "; SIAM U = 0.2, Δ = 0.04, Λ = 4, T = 1e-4, N = ", to["N"], ", n_dec = 8")
+@printf("%6s | %-24s | %-24s | %-24s | %-24s\n", "Nkeep", "sweep [s] old / new", "2p [s] old / new", "3p [s] old / new", "4p [s] old / new")
+ratios = zeros(4, length(to["nkeep"]))
+for (j, Nk) in enumerate(to["nkeep"])
+    cols = [(to["sweep"][j], tn["sweep"][j]); [(to["psf"][i, j], tn["psf"][i, j]) for i in 1:3]]
+    ratios[:, j] = [b / a for (a, b) in cols]
+    @printf("%6d | %s\n", Nk, join([@sprintf("%7.2f / %7.2f  (%.2f×)", a, b, b / a) for (a, b) in cols], " | "))
+end
+println("4p cost (shell traces / composites / slice refinements), old vs new: ",
+        join(["$(c1["traces"]) / $(c1["composites"]) / $(c1["refinements"]) vs $(c2["traces"]) / $(c2["composites"]) / $(c2["refinements"])"
+              for (c1, c2) in zip(to["costs"], tn["costs"])], "; "))
+RESULTS["timing_ratio"] = (sweep = maximum(ratios[1, :]), p2 = maximum(ratios[2, :]), p3 = maximum(ratios[3, :]), p4 = maximum(ratios[4, :]))
 """)
 
 code(r"""

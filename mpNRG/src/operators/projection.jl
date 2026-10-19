@@ -76,12 +76,12 @@ The refinement map of a KK operator of shell `n-1` into all sectors of shell
 with the fermionic parity string of rule (R1): an operator of parity `p` on
 earlier sites acts on the product basis as `Z_n^p ⊗ O`. Only the KK block of
 `O` enters; `O` may live on the full leg of shell `n-1` or on its kept leg.
-[`refine_KK`](@ref) with the isometry of shell `n`; a `SlicedTensor` is
-refined slice by slice.
+[`refine_KK`](@ref) with the isometry of shell `n` (through its
+[`RefinePlan`](@ref)); a `SlicedTensor` is refined slice by slice.
 """
 function refine(run::NRGRun, O::Union{BlockTensor,SlicedTensor}, n::Integer)
     sh = shell(run, n)
-    return refine_KK(sh.A, sh.Adag, O)
+    return refine_KK(sh.plan, O)
 end
 
 """

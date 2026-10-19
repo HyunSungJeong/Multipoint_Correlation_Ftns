@@ -66,7 +66,7 @@ Base.isless(a::Sector{M,K}, b::Sector{M,K}) where {M,K} = isless(a.q, b.q)
 # content hash: the default hash of a struct value mixes in the identity of
 # its type, which differs between builds (code loaded); dictionaries keyed by
 # labels would then iterate, and accumulate, in a build-dependent order
-Base.hash(a::Sector, h::UInt) = hash(a.q, hash(:Sector, h))
+Base.hash(a::Sector, h::UInt) = hash(a.q, h ⊻ 0x5ec7a8e3c1d2b4f6)
 Base.getindex(a::Sector, i::Integer) = a.q[i]
 Base.length(::Sector{M,K}) where {M,K} = K
 Base.show(io::IO, a::Sector) = print(io, "Sector", a.q)

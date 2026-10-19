@@ -208,6 +208,79 @@ function refine_KK(A::BlockTensor{TA,3,S}, Adag::BlockTensor{TA,3,S}, O::BlockTe
 end
 refine_KK(A::BlockTensor, Adag::BlockTensor, O::SlicedTensor) = mapslices(B -> refine_KK(A, Adag, B), O)
 
+"""
+    RefinePlan(A, Fu)
+
+[`refine_KK`](@ref) for repeated use with one isometry (the PSF engine refines
+every carried slice of every shell): `A^n` in the matrix form of
+[`isometry_matrix`](@ref) (rows the product basis of `Fu`, site sector slow
+and kept state fast, as in the pre-refactor `Shell.A`), one dense matrix per
+label, built once per shell. `refine_KK(plan, O)` then applies
+`(Z_n)^p ⊗ O_KK` pair by pair of the fusion map (`mul!` on row ranges) and
+rotates with one product per label, instead of the two general contractions
+of `refine_KK(A, Adag, O)` (same result to rounding; `test_nrg_tensors.jl`
+compares them). A performance specialization: the generic contraction spends
+most of its time on block bookkeeping for the many small blocks of a shell.
+"""
+struct RefinePlan{S<:Sector,T<:Number}
+    fusion::FusionMap{S}
+    legs::NTuple{2,Leg{S}}              # the shell leg (rows, Out) and its dual (columns)
+    # label q => the isometry block (product states of q × eigenstates of q), its K and D columns apart
+    U::Dict{S,NTuple{2,Matrix{T}}}
+end
+function RefinePlan(A::BlockTensor{T,3,S}, Fu::FusionMap{S}) where {T,S}
+    Um = isometry_matrix(A, Fu)
+    l = TNOps.witharrow(TNOps.leg(A, 3), Out)
+    U = Dict{S,NTuple{2,Matrix{T}}}()
+    for q in sectors(l)
+        B = getblock(Um, q); nk = dim(l, LegSector(q, KTAG))
+        U[q] = (B[:, 1:nk], B[:, (nk + 1):end])
+    end
+    return RefinePlan{S,T}(Fu, (l, dual(l)), U)
+end
+
+const _KD = (KTAG, DTAG)
+
+function refine_KK(P::RefinePlan{S,TA}, O::BlockTensor{TO,2,S}) where {S,TA,TO}
+    Fu = P.fusion
+    T = promote_type(TA, TO)
+    Δ = TNOps.flux(O)
+    sgnodd = isodd(parity(Δ))
+    blocks = Dict{NTuple{2,LegSector{S}},Array{T,2}}()
+    for (qin, prs) in Fu.pairs
+        qout = LegSector(fuse(qin.label, Δ), qin.tag)
+        haskey(Fu.pairs, qout) || continue
+        Ain = get(P.U, qin.label, nothing); Aout = get(P.U, qout.label, nothing)
+        (Ain === nothing || Aout === nothing) && continue
+        nrow = size(Aout[1], 1)
+        Tm = nothing                     # (Z^p ⊗ O_KK) A_in, the K and D columns apart
+        for pr in prs
+            r = LegSector(target(O, pr.q.label), KTAG)
+            Ob = TNOps.blockornothing(O, (r, pr.q))         # O_KK: kept rows and columns of shell n-1
+            Ob === nothing && continue
+            hit = get(Fu.lookup, (pr.σ, r), nothing)
+            hit === nothing && continue
+            p2 = Fu.pairs[qout][hit[2]]
+            sg = sgnodd && isodd(parity(pr.σ.label)) ? -one(T) : one(T)     # (Z_n)^p on the site sector
+            Tm === nothing && (Tm = (zeros(T, nrow, size(Ain[1], 2)), zeros(T, nrow, size(Ain[2], 2))))
+            for iσ in 1:pr.dσ
+                rin = (pr.offset + (iσ - 1) * pr.dq + 1):(pr.offset + iσ * pr.dq)
+                rout = (p2.offset + (iσ - 1) * p2.dq + 1):(p2.offset + iσ * p2.dq)
+                for y in 1:2
+                    isempty(Tm[y]) || mul!(view(Tm[y], rout, :), Ob, view(Ain[y], rin, :), sg, one(T))
+                end
+            end
+        end
+        Tm === nothing && continue
+        for x in 1:2, y in 1:2                                  # block (row tag x, column tag y) = A_out,x† T_y
+            (isempty(Aout[x]) || isempty(Tm[y])) && continue
+            blocks[(LegSector(qout.label, _KD[x]), LegSector(qin.label, _KD[y]))] = Aout[x]' * Tm[y]
+        end
+    end
+    return BlockTensor{T,2,S}(P.legs, Δ, blocks)
+end
+refine_KK(P::RefinePlan, O::SlicedTensor) = mapslices(B -> refine_KK(P, B), O)
+
 # the kept-kept operator re-labelled onto the kept leg of the isometry (same
 # space; names and arrows aligned so that the contraction checks pass)
 function _onlegs(O::BlockTensor{T,2,S}, kept::Leg{S}) where {T,S}

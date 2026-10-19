@@ -1,5 +1,10 @@
 # Task sheet: `mpNRG`, a general-purpose multipoint NRG code base in Julia
 
+> **Note (2026-10-19).** This sheet was amended by the TNOps refactor, whose own sheet is
+> [`TNOPS_REFACTOR.md`](TNOPS_REFACTOR.md) (Section 11 there lists the amendments). The abelian block-sparse
+> layer now lives in the sibling package `TNOps/` at the repository root, and `mpNRG/src/nrg/tensors.jl` holds the
+> only tensor operations of `mpNRG`. Amended passages are marked **[Amended 2026-10-19, TNOps refactor]**.
+
 Repository: `https://github.com/HyunSungJeong/Multipoint_Correlation_Ftns`
 Branch: **`claude/practical-archimedes`** (existing; HEAD `541d40a` at the time of writing). Do not create a new branch.
 Target folder: **`mpNRG/`** at the repository root. All NRG code lives there.
@@ -47,6 +52,7 @@ Out of scope for this task (Section 9 lists future extensions the design must no
    - Work and commit on `claude/practical-archimedes`.
    - Do not modify `src/`, `test/` or `notebooks/` of `HubbardAtom`.
    - Allowed outside `mpNRG/`: one new row block in the root `README.md` status section, and root `.gitignore` entries.
+   - **[Amended 2026-10-19, TNOps refactor]** Code may also live in `TNOps/` (the abelian block-sparse tensor package, a sibling of `mpNRG/`).
    - Push after each phase if the environment permits; otherwise leave the commits local and say so in `STATUS.md`.
 2. **Separate package.**
    - `mpNRG/` is its own Julia package, `MultipointNRG`, with its own `Project.toml` and UUID.
@@ -59,6 +65,7 @@ Out of scope for this task (Section 9 lists future extensions the design must no
    - optionally `ThreadsX` or plain `Threads` for parallel loops.
 
    Do not add QSpace, ITensors, TensorKit or similar. The abelian block-sparse layer is written in this package so that it stays transparent.
+   **[Amended 2026-10-19, TNOps refactor]** The abelian block-sparse layer is the in-repository package `TNOps/` (dependencies `LinearAlgebra`, `Printf`); still no external tensor libraries.
 4. **Papers.**
    - Paper PDFs are not in the repository. Ask the user to place them in `mpNRG/refs/`, which must be in `.gitignore` (never commit PDFs). If network access allows, download arXiv versions instead; the arXiv IDs are in Section 2.
    - **Read every equation, sign, index and overbar from the page images, never from the PDF text layer.** The text layer of Lee 2021 is known to corrupt brackets, primes, overbars and underlines (`]`, `⋯` and the underlines of sliced frequencies are affected).
@@ -143,10 +150,11 @@ mpNRG/
 ├── src/
 │   ├── MultipointNRG.jl      # module, exports
 │   ├── fock/                 # local Fock spaces, fermionic operators, operator algebra
-│   ├── symmetry/             # abelian quantum numbers, block-sparse matrices
+│   ├── (symmetry/)           # [amended] moved to the sibling package TNOps/ (see below)
 │   ├── bath/                 # hybridization functions, discretization, tridiagonalization
 │   ├── model/                # ImpurityModel, built-in models
-│   ├── nrg/                  # forward sweep, truncation, shell storage (Anders–Schiller basis)
+│   ├── nrg/                  # forward sweep, truncation, shell storage (Anders–Schiller basis);
+│   │                         #   [amended] nrg/tensors.jl: the named NRG contractions on TNOps tensors
 │   ├── operators/            # shell-sector projections, local/nonlocal expansions, products
 │   ├── fdm/                  # backward sweep, reduced density matrices, thermal averages
 │   ├── psf/                  # grids, histograms, binning, slicing, 2p/3p/4p engines
@@ -163,6 +171,11 @@ mpNRG/
     ├── mpnrg_validation.ipynb   # executed, committed with outputs
     └── mpnrg_validation.pdf
 ```
+
+**[Amended 2026-10-19, TNOps refactor]** The abelian layer is the sibling package `TNOps/` (`TNOps/src`: symmetry, legs, `BlockTensor`,
+`SlicedTensor`, fusion, factorizations, `global_cut`, parity, `ncon`, interface; `TNOps/test`, `TNOps/notebooks`).
+`mpNRG/src/symmetry/` no longer exists; `mpNRG/src/nrg/tensors.jl` is the only place where `mpNRG` operates on
+tensors (refactor sheet Sec. 4).
 
 Layering rule: `psf/` and `fdm/` depend on `nrg/` and `operators/`, never the reverse. `reference/` depends only on `fock/` and `bath/`, so it is an independent check of `nrg/`.
 
@@ -214,6 +227,11 @@ Layering rule: `psf/` and `fdm/` depend on `nrg/` and `operators/`, never the re
 - Operators acting on the impurity **and** Wilson site 0 must also be expressible, e.g. $d^\dagger_\downarrow f_{0\downarrow}$. Lee treats operators acting nontrivially only on sites $-1$ to $n_0$ as local (Sec. IV B, p. 8).
 
 ### 5.2 Abelian symmetries (`symmetry/`)
+
+**[Amended 2026-10-19, TNOps refactor]** The behaviour specified in 5.2 stays authoritative; the locations change: 5.2.1–5.2.2 and 5.2.9 →
+`TNOps/src/symmetry.jl` and `interface.jl`; 5.2.4 → the `TNOps` legs, `BlockTensor` and `SlicedTensor`; 5.2.5 → the
+`TNOps` fusion and parity plus `nrg/tensors.jl` (`fuse_site`, `lift_site`, `refine_KK`); 5.2.7 → `TNOps.global_cut`,
+called by `truncate_shell`; 5.2.3 and 5.2.6 stay in `mpNRG`.
 
 This layer is written inside the package (ground rule 3). Everything above it (`nrg/`, `operators/`, `fdm/`, `psf/`) talks to it only through the interface of Section 5.2.9, so that a non-abelian layer can replace it later.
 
@@ -330,6 +348,9 @@ This layer is written inside the package (ground rule 3). Everything above it (`
 A non-abelian implementation would supply multiplet dimensions greater than 1, fusion outer multiplicities and Clebsch–Gordan data behind the same functions (see [R22] for what such a layer involves). Do not implement it now. Do not let any module above `symmetry/` assume that a block row is a single state rather than a multiplet: route every state count through `degeneracy`, including partition functions, traces and FDM shell weights.
 
 #### 5.2.10 Tests (part of V1, phase P1)
+
+**[Amended 2026-10-19, TNOps refactor]** The generic tests (labels, block algebra, fusion, factorizations) move to `TNOps/test/`; the
+physics-facing tests (fermionic signs, symmetry checks, the shell construction) stay in `mpNRG/test/`.
 
 - **Labels:** group axioms for `fuse` and `dual`; canonical forms of Z_n labels.
 - **Block algebra:** for random `BlockOp`s with random shifts, compare against `todense`:
@@ -571,6 +592,8 @@ Practical guidance:
    - open issues.
 4. `mpNRG/notebooks/mpnrg_validation.ipynb` (executed, with outputs) and its PDF.
 5. Root `README.md`: a short `mpNRG` block in the status section, in the existing table style (sheet / check / accuracy).
+6. **[Amended 2026-10-19, TNOps refactor]** The validation notebook re-executed on the refactored code, its PDF regenerated, and its section
+   "Refactor regression (TNOps)" (baseline comparison and timing, refactor sheet Sec. 9.4).
 
 ---
 

@@ -49,6 +49,13 @@ end
             R = M.refine_KK(A, Adag, O)
             Rold = fxop(fx["out"], shellleg(n))
             @test relerr(todense(R), todense(Rold)) ≤ 1e-13
+            # the RefinePlan path of the PSF engine: same tensor (legs, blocks) to rounding
+            Rp = M.refine_KK(M.RefinePlan(A, Fu), O)
+            @test TN.legs(Rp) == TN.legs(R) && TN.flux(Rp) == TN.flux(R)
+            @test relerr(todense(Rp), todense(R)) ≤ 1e-14 && relerr(todense(Rp), todense(Rold)) ≤ 1e-13
+            Ok = M.kk_tensor(M.kept_leg(shellleg(n - 1)), TN.flux(O), Dict(q => getblock(O, q)[1:M.dim(shellleg(n - 1), LegSector(target(O, q), M.KTAG)), 1:M.dim(shellleg(n - 1), LegSector(q, M.KTAG))]
+                                                                   for q in sectors(shellleg(n - 1)) if haskey(shellleg(n - 1), target(O, q))), Float64)
+            @test relerr(todense(M.refine_KK(M.RefinePlan(A, Fu), Ok)), todense(R)) ≤ 1e-14     # O on the kept leg
             # sliced: slice by slice
             st = SlicedTensor(Dict((1, 2) => O, (3, 4) => 2.0 * O))
             sr = M.refine_KK(A, Adag, st)

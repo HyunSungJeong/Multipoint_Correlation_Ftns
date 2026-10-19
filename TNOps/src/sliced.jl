@@ -56,7 +56,7 @@ getslice(st::SlicedTensor, k, default) = get(st.slices, k, default)
 
 """    setslice!(st, k, A) — store slice `k` (legs and flux must match)."""
 function setslice!(st::SlicedTensor{Kt,T,N,S}, k, A::BlockTensor{T,N,S}) where {Kt,T,N,S}
-    all(i -> leg(A, i) == leg(st, i), 1:N) || throw(DimensionMismatch("slice $k has different legs"))
+    all(i -> leg(A, i) === leg(st, i) || leg(A, i) == leg(st, i), 1:N) || throw(DimensionMismatch("slice $k has different legs"))
     flux(A) == flux(st) || throw(ArgumentError("slice $k has flux $(flux(A)) ≠ $(flux(st))"))
     st.slices[k] = A
     return st

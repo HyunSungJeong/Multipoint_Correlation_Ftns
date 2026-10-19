@@ -15,7 +15,7 @@
 column leg).
 """
 @enum Arrow::Int8 In = 0 Out = 1
-Base.hash(a::Arrow, h::UInt) = hash(Int8(a), hash(:Arrow, h))       # content hash (see Sector)
+Base.hash(a::Arrow, h::UInt) = hash(Int8(a), h ⊻ 0xa7703e1d2c4b5f69)       # content hash (see Sector)
 
 flip(a::Arrow) = a == In ? Out : In
 
@@ -35,7 +35,7 @@ LegSector(q::Sector) = LegSector(q, 0)
 label(s::LegSector) = s.label
 tag(s::LegSector) = s.tag
 Base.isless(a::LegSector{S}, b::LegSector{S}) where {S} = isless((a.label, a.tag), (b.label, b.tag))
-Base.hash(s::LegSector, h::UInt) = hash(s.tag, hash(s.label, hash(:LegSector, h)))   # content hash (see Sector)
+Base.hash(s::LegSector, h::UInt) = hash(s.label.q, hash(s.tag, h ⊻ 0x1e95ec7a0b3d6f21))   # content hash (see Sector)
 Base.show(io::IO, s::LegSector) = s.tag == 0 ? print(io, s.label) : print(io, s.label, "#", s.tag)
 
 """

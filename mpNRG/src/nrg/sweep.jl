@@ -60,7 +60,8 @@ Data of Wilson shell `n` (Lee Sec. III A), per symmetry block:
   - `fusion`: the product basis `{|σ_n⟩ ⊗ |s⟩^{n-1}_K}`, a TNOps `FusionMap`
     (site leg outer, kept leg of shell n-1 inner; `nothing` at n = -1);
   - `A`: the isometry of Lee Eq. (15) as a TNOps tensor with legs (old, site,
-    new) — rank 2 (site, new) at n = -1 —, `Adag` its adjoint (`nrg/tensors.jl`);
+    new) — rank 2 (site, new) at n = -1 —, `Adag` its adjoint (`nrg/tensors.jl`),
+    `plan` its [`RefinePlan`](@ref) for the refinement map (`nothing` at n = -1);
   - `loc`: the local space of site `n`;
   - `F`: the annihilators `f_{nν}` of site `n` in the shell-`n` basis (all
     states, rank-2 tensors on `leg`), needed for the hopping to site `n+1`.
@@ -75,6 +76,7 @@ struct Shell{S<:Sector,T<:Number}
     fusion::Union{Nothing,FusionMap{S}}
     A::BlockTensor
     Adag::BlockTensor
+    plan::Union{Nothing,RefinePlan{S,T}}
     loc::LocalSpace{S}
     F::Vector{BlockTensor{T,2,S}}
     info::Dict{Symbol,Any}
@@ -232,7 +234,8 @@ function _make_shell(n, res, nk::Dict{S}, shift, Fu, A, loc::LocalSpace{S}, Fs::
                      Adag = isometry_adjoint(A)) where {S,T}
     leg = TNOps.witharrow(TNOps.leg(A, ndims(A)), Out)
     E = res[:Erel]; space = res[:space]
-    return Shell{S,T}(n, space, leg, Dict{S,Int}(nk), E, shift, Fu, A, Adag, loc, Fs, info)
+    plan = Fu === nothing ? nothing : RefinePlan(A, Fu)
+    return Shell{S,T}(n, space, leg, Dict{S,Int}(nk), E, shift, Fu, A, Adag, plan, loc, Fs, info)
 end
 
 energy_scale_param(m::ImpurityModel, p::NRGParams, n::Integer) = _bandD(m) * p.Λ^(-(n - 1) / 2)
