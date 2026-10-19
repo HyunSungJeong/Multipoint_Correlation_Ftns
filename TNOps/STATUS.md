@@ -125,4 +125,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R6b | mpNRG `RefinePlan` (engine performance, `mpNRG/STATUS.md`); cheaper hashes; `setslice!` identity check (decision 8) | `4cf33a3f15beb35f283454c1b58e2493ab7ae917` |
 | R6c | mpNRG `timing_compare.jl`: minimum over repetitions after a full GC | `839b151bd9a0d5bc2283424b47806aa71546eb39` |
 | R6d | TNOps notebook re-executed, PDF; timing comparison data; README and STATUS records | `26e16909d9e57f9f5fa54017c1f00b2381de13f8` |
-| R6e | V8 re-run; `mpnrg_validation.ipynb` re-executed with the regression section; PDF and figures; records | (this commit; its hash is recorded in the final record commit) |
+| R6e | V8 re-run; `mpnrg_validation.ipynb` re-executed with the regression section; PDF and figures; records | `45427709489be9e3bda7630fe5d6c0ad62710786` |

@@ -122,8 +122,8 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R6a | `TNOps/src/legacy.jl` replaced by aliases and thin wrappers (`compat.jl`); content hashes for `Sector`, `LegSector`, `Arrow`; README "Changes in the TNOps refactor"; V1d and `build_notebook.py` without changed internals; `scripts/timing_compare.jl` | `0c10fe1` |
 | R6b | `RefinePlan`: the refinement map of the PSF engine on the isometry in fused-matrix form (finding R6 below); notebook section "Refactor regression (TNOps)"; `docs/TASK.md` amended | `4cf33a3` |
 | R6c | `timing_compare.jl`: minimum over repetitions after a full GC | `839b151` |
-| R6d | TNOps notebook re-executed and its PDF regenerated; timing comparison (`timing_compare.jld2`); STATUS, README (root, TNOps) records | see `TNOps/STATUS.md` |
-| R6e | V8 re-run, `mpnrg_validation.ipynb` re-executed with the regression section, PDF and figures regenerated; verification record re-confirmed | see `TNOps/STATUS.md` |
+| R6d | TNOps notebook re-executed and its PDF regenerated; timing comparison (`timing_compare.jld2`); STATUS, README (root, TNOps) records | `26e1690` |
+| R6e | V8 re-run, `mpnrg_validation.ipynb` re-executed with the regression section, PDF and figures regenerated; verification record re-confirmed | `4542770` |
 
 **Finding (R5b): an eigensolver driver difference shows at the 1e-13 level.**
 With the sweep on TNOps tensors, V1d failed one assertion: the shell-2
