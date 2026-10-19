@@ -31,7 +31,7 @@ export SymFactor, U1, Zn, Z2, Sector, SymmetryGroup, sector, labeltype, factor_i
 # legs and block tensors
 export Arrow, In, Out, arrow, LegSector, Leg, legsectors, sectors, dim, offsets, charge, samespace, isdual,
        BlockTensor, getblock, setblock!, hasblock, blockkeys, eachblock, nblocks, allowed_keys, target,
-       randtensor, identity_tensor, subtensor, restrict, convert_eltype,
+       randtensor, identity_tensor, subtensor, restrict, retag, subleg, convert_eltype,
        SlicedTensor, setslice!, nslices,
        permute, contract, outer, todense, fromdense, keyflux,
        FusionPair, FusionMap, fusionmap, kron_fused, fuse_legs, split_legs,

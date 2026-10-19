@@ -39,7 +39,8 @@ include("bath/chain.jl")
 # models
 include("model/model.jl")
 include("model/builtin.jl")
-# forward sweep
+# the NRG tensor layer (named contractions on TNOps tensors), forward sweep
+include("nrg/tensors.jl")
 include("nrg/sweep.jl")
 # operator projections, density matrix
 include("operators/projection.jl")

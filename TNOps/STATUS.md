@@ -15,8 +15,8 @@ refactored onto.
 
 ## Verification record
 
-Tests: `julia -t 4 --project=TNOps/test TNOps/test/runtests.jl` — **2351
-assertions, all passing**. Every operation is checked against the same
+Tests: `julia -t 4 --project=TNOps/test TNOps/test/runtests.jl` — **2354
+assertions, all passing** (R4: `retag` of a tensor leg added). Every operation is checked against the same
 operation on `todense` arrays to 1e-13 relative, for random tensors of rank
 1–5 with 2–5 sectors per leg (tagged and untagged), random fluxes, the
 symmetries U1×U1×Z2, Z3 (×Pf) and parity only, real and complex elements;
@@ -79,3 +79,4 @@ checked with `git ls-remote origin refs/heads/claude/practical-archimedes`.
 | R0 | regression baseline and fixtures in `mpNRG/test/baseline/` | `debf22af2b97225347e05c0670c5fa7fd6453896` |
 | R1 | `TNOps/` package: `git mv` of the symmetry layer, module wrapper, tests V1a/V1b | `9fb953612984b11a392d8d1d41ca3dcfd359d232` |
 | R2 | legs, `BlockTensor`, `SlicedTensor`, arithmetic, `permute`, `contract`, `tr`, `outer`, `dense.jl` | `268d6cae63cb9749a13945816b499c2c65474966` |
+| R3 | fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook | `1c38847989e9c787cd271af8c4d208b8f36ef528` |

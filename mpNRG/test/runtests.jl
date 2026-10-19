@@ -20,8 +20,8 @@ const FILES = [
     "test_v6_consistency.jl", "test_v7_spectral.jl", "test_hubbardatom.jl", "test_io.jl", "test_v8_external.jl",
     # P9
     "test_hooks_models.jl",
-    # TNOps refactor: regression against the pre-tensor-refactor baseline
-    "baseline/test_baseline.jl",
+    # TNOps refactor: the NRG tensor layer, regression against the pre-tensor-refactor baseline
+    "test_nrg_tensors.jl", "baseline/test_baseline.jl",
 ]
 
 @testset "MultipointNRG" begin

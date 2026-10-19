@@ -321,3 +321,32 @@ Rank-2 form keyed by labels (untagged legs), as in the pre-refactor layer.
 function restrict(A::BlockTensor{T,2,S}, rows::AbstractDict{S,UnitRange{Int}}, cols::AbstractDict{S,UnitRange{Int}}) where {T,S}
     return restrict(A, (Dict(LegSector(q) => r for (q, r) in rows), Dict(LegSector(q) => r for (q, r) in cols)))
 end
+
+"""
+    retag(A, i, split) -> BlockTensor
+
+Split leg `i` of `A` into tagged sub-sectors (see [`retag`](@ref) for legs:
+`split(s, d)` returns the `(tag, dim)` parts of sector `s` of dimension `d`)
+and split every block along that leg accordingly; all-zero parts are not
+stored. Example: the kept/discarded split of the eigenstates of an NRG shell.
+"""
+function retag(A::BlockTensor{T,N,S}, i::Integer, split) where {T,N,S}
+    li = leg(A, i)
+    parts = Dict(s => split(s, d) for (s, d) in zip(legsectors(li), li.dims))
+    newl = retag(li, (s, d) -> parts[s])
+    ls = ntuple(j -> j == i ? newl : leg(A, j), Val(N))
+    C = BlockTensor{T}(ls, flux(A))
+    cb = getfield(C, :blocks)
+    for (k, M) in eachblock(A)
+        o = 0
+        for (t, n) in parts[k[i]]
+            n == 0 && continue
+            idx = ntuple(j -> j == i ? (o .+ (1:n)) : Colon(), Val(N))
+            sub = M[idx...]
+            o += n
+            all(iszero, sub) && continue
+            cb[ntuple(j -> j == i ? LegSector(k[i].label, Int(t)) : k[j], Val(N))] = sub
+        end
+    end
+    return C
+end

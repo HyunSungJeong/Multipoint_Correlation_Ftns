@@ -111,7 +111,8 @@ deviation 2.4e-14 of the largest weight in the PSF totals.
 | R0 | baseline, fixtures, old-format file, tag recorded | `debf22a` |
 | R1 | `TNOps/` package with the moved symmetry layer (`git mv`, then the module); mpNRG uses and re-exports it; V1a, V1b moved to `TNOps/test` | `9fb9536` |
 | R2 | TNOps: legs, `BlockTensor`, `SlicedTensor`, contractions, dense maps (mpNRG unchanged, still on the legacy layer) | `268d6ca` |
-| R3 | TNOps: fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook; mpNRG refers to the legacy fusion type as `OldFusionMap` | see `TNOps/STATUS.md` |
+| R3 | TNOps: fusion, factorizations, `global_cut`, parity, `ncon`, interface, README, checks notebook; mpNRG refers to the legacy fusion type as `OldFusionMap` | `1c38847` |
+| R4 | `nrg/tensors.jl`: the named NRG contractions on TNOps tensors (`fuse_site`, `product_hamiltonian`, `diagonalize_shell`, `rotate`, `lift_site`, `refine_KK`, `backward_step`, `shell_trace`, `block_view`, …) with `test_nrg_tensors.jl` (frozen fixtures to 1e-13; dense JW reference, 3 interacting spinful sites); not yet used by the sweep | see `TNOps/STATUS.md` |
 
 ## Phase log
 

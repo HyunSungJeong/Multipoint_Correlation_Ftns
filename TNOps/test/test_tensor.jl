@@ -190,6 +190,10 @@ end
     @test all(getblock(At, q) == getblock(A, q) for q in sectors(V))
     sub = TNOps.subtensor(At, (s -> s.tag == 1, s -> s.tag == 1))
     @test all(k -> k[1].tag == 1 && k[2].tag == 1, blockkeys(sub))
+    # retag a tensor leg: blocks split along it, dense embedding unchanged
+    Ar = retag(A, 2, (s, d) -> d ≥ 2 ? [(1, 1), (2, d - 1)] : [(1, d)])
+    @test todense(Ar) == D && TNOps.leg(Ar, 2) == dual(Vt)
+    @test all(k -> TNOps.isallowed(Ar, k), blockkeys(Ar))
 end
 
 @testset "SlicedTensor" begin
