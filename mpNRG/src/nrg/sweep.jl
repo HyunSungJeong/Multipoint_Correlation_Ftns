@@ -112,6 +112,19 @@ _bandD(m::ImpurityModel) = isempty(m.channels) ? 1.0 : maximum(bandwidth(c.hyb) 
 
 _eltype(e::OpExpr) = eltype(e) <: Real ? Float64 : ComplexF64
 
+# temporary (refactor step R5a, removed in R5b): the legacy sweep consumes
+# legacy BlockOps; fock/ now builds TNOps tensors
+function _tolegacy(A::BlockTensor{T,2,S}, V::SectorSpace{S}) where {T,S}
+    B = BlockOp{T}(V, V, A.shift)
+    for q in sectors(V)
+        haskey(V, target(A, q)) || continue
+        M = getblock(A, q)
+        any(!iszero, M) && setblock!(B, q, M)
+    end
+    return B
+end
+_legacy_localop(L::LocalSpace, a::OpExpr; T::Type) = _tolegacy(localop(L, a; T = T), localspace_sectors(L))
+
 # R[q] = Ar[target]' * P[q] * Ac[q]: rotate a product-space operator into a shell basis.
 function _rotate(P::BlockOp{TP,S}, Ar::Dict{S,<:AbstractMatrix}, Ac::Dict{S,<:AbstractMatrix},
                  rowsp::SectorSpace{S}, colsp::SectorSpace{S}) where {TP,S}
@@ -270,7 +283,7 @@ function run_nrg(model::ImpurityModel{S}, p::NRGParams; chains = nothing) where 
         Ik = identity_op(Vk, T)
         Fs = BlockOp{T,S}[]
         for c in model.channels
-            fl = localop(loc, cop(Mode(n, c.name)); T = T)
+            fl = _legacy_localop(loc, cop(Mode(n, c.name)); T = T)
             P = kron_op(fl, Ik, Fu, Fu)
             push!(Fs, _rotate(P, Vv, Vv, space, space))
         end
@@ -308,13 +321,13 @@ function _chain_product_hamiltonian(model, chs, n, prev::Shell{S,T}, loc, Fu, ::
     Ek = _diagop(Vk, Dict(q => prev.E[q][1:nkept(prev, q)] for q in sectors(Vk)), T)
     hloc = BlockOp{T}(Vloc, Vloc, neutral(S))
     for (c, ch) in zip(model.channels, chs)
-        hloc = hloc + ch.eps[n + 1] * localop(loc, num(Mode(n, c.name)); T = T)
+        hloc = hloc + ch.eps[n + 1] * _legacy_localop(loc, num(Mode(n, c.name)); T = T)
     end
     H = kron_op(Il, Ek, Fu, Fu) + kron_op(hloc, Ik, Fu, Fu)
-    Z = parity_op(loc)
+    Z = _tolegacy(parity_op(loc), Vloc)
     kk = Dict(q => krange(prev, q) for q in sectors(prev.space) if nkept(prev, q) > 0)
     for (ν, (c, ch)) in enumerate(zip(model.channels, chs))
-        fdag = localop(loc, cdag(Mode(n, c.name)); T = T) * Z      # f†_{nν} Z_n
+        fdag = _legacy_localop(loc, cdag(Mode(n, c.name)); T = T) * Z      # f†_{nν} Z_n
         fprev = restrict(prev.F[ν], kk, kk)                          # f_{n-1,ν} on K
         hop = ch.t[n + 1] * kron_op(fdag, fprev, Fu, Fu)
         H = H + hop + hop'

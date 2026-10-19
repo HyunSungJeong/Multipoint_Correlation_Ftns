@@ -1,7 +1,8 @@
 # Dense brute-force exact diagonalization of finite Wilson chains (task sheet
 # Sec. 5.12). Small and slow by design, independent of `nrg/`: it uses only the
-# Fock-space construction of `fock/` (with the block-sparse containers of
-# `symmetry/` as plain data structures) and the chains of `bath/`.
+# Fock-space construction of `fock/` and the chains of `bath/`. Its numerics
+# are dense; TNOps containers appear only as the return type of
+# `ed_operator`.
 
 """
     EDResult
@@ -15,7 +16,7 @@ weights `ρ[q]` and the partition function `Z` (with the ground-state energy
 struct EDResult{S,T}
     basis::FockBasis
     charges::Dict{Mode,S}
-    space::SectorSpace{S}
+    space::Leg{S}
     fockidx::Dict{S,Vector{Int}}
     E::Dict{S,Vector{Float64}}
     U::Dict{S,Matrix{T}}
@@ -61,35 +62,44 @@ function ed_reference(H::OpExpr, ms::AbstractVector{Mode}, ch::AbstractDict{Mode
     E0 = minimum(minimum(e) for e in values(E))
     Z = sum(sum(exp.(-β .* (e .- E0))) for e in values(E))
     ρ = Dict(q => exp.(-β .* (e .- E0)) ./ Z for (q, e) in E)
-    sp = SectorSpace(Dict(q => length(ii) for (q, ii) in idx))
+    sp = Leg(Dict(q => length(ii) for (q, ii) in idx))
     return EDResult{S,T}(B, Dict{Mode,S}(ch), sp, idx, E, U, Float64(β), E0, Z, ρ)
 end
 
-"""
-    ed_operator(ed, O) -> BlockOp
-
-The homogeneous operator expression `O` in the ED eigenbasis, as a block
-operator on the sectors of `ed`.
-"""
-function ed_operator(ed::EDResult{S,T}, O::OpExpr) where {S,T}
+# dense blocks of a homogeneous operator in the ED eigenbasis, keyed by column sector
+function _ed_blocks(ed::EDResult{S,T}, O::OpExpr) where {S,T}
     Δ = opshift(O, ed.charges)
     Tt = promote_type(T, eltype(O) <: Real ? Float64 : ComplexF64)
     Od = densematrix(O, ed.basis; T = Tt)
-    A = BlockOp{Tt}(ed.space, ed.space, Δ)
+    B = Dict{S,Matrix{Tt}}()
     for (q, ii) in ed.fockidx
         r = fuse(q, Δ)
         haskey(ed.fockidx, r) || continue
-        M = ed.U[r]' * Od[ed.fockidx[r], ii] * ed.U[q]
-        A.blocks[q] = M
+        B[q] = ed.U[r]' * Od[ed.fockidx[r], ii] * ed.U[q]
+    end
+    return Δ, B
+end
+
+"""
+    ed_operator(ed, O) -> BlockTensor
+
+The homogeneous operator expression `O` in the ED eigenbasis, as a rank-2
+block tensor on the sectors of `ed`.
+"""
+function ed_operator(ed::EDResult{S,T}, O::OpExpr) where {S,T}
+    Δ, B = _ed_blocks(ed, O)
+    A = BlockTensor{valtype(B) |> eltype}(ed.space, ed.space, Δ)
+    for (q, M) in B
+        setblock!(A, q, M)
     end
     return A
 end
 
 """    ed_thermal_average(ed, O) — `Tr[ρ O]` for a neutral operator expression."""
 function ed_thermal_average(ed::EDResult, O::OpExpr)
-    A = ed_operator(ed, O)
-    isneutral(A.shift) || return zero(eltype(A))
-    return sum(sum(ed.ρ[q] .* diag(M)) for (q, M) in A.blocks)
+    Δ, B = _ed_blocks(ed, O)
+    isneutral(Δ) || return zero(eltype(valtype(B)))
+    return sum(sum(ed.ρ[q] .* diag(M)) for (q, M) in B)
 end
 
 """
@@ -103,9 +113,9 @@ blocks; terms with `|w| ≤ wtol` are dropped.
 """
 function ed_psf(ed::EDResult{S,T}, ops::Tuple; wtol::Real = 0.0) where {S,T}
     ℓ = length(ops)
-    Bs = [ed_operator(ed, O) for O in ops]
-    tot = foldl(fuse, (B.shift for B in Bs); init = neutral(S))
-    Tw = promote_type(map(eltype, Bs)...)
+    Bs = [_ed_blocks(ed, O) for O in ops]                       # (shift, dense blocks by column sector)
+    tot = foldl(fuse, (B[1] for B in Bs); init = neutral(S))
+    Tw = promote_type((eltype(valtype(B[2])) for B in Bs)...)
     pos = Float64[]; ws = Tw[]
     isneutral(tot) || return reshape(pos, ℓ - 1, 0), ws
     for q1 in sectors(ed.space)
@@ -113,12 +123,12 @@ function ed_psf(ed::EDResult{S,T}, ops::Tuple; wtol::Real = 0.0) where {S,T}
         qs = [q1]
         ok = true
         for i in 1:ℓ
-            qn = fuse(qs[end], dual(Bs[i].shift))
+            qn = fuse(qs[end], dual(Bs[i][1]))
             haskey(ed.E, qn) || (ok = false; break)
             push!(qs, qn)
         end
         ok || continue
-        Ms = [getblock(Bs[i], qs[i + 1]) for i in 1:ℓ]   # rows: q_i, cols: q_{i+1}
+        Ms = [get(Bs[i][2], qs[i + 1], zeros(Tw, length(ed.E[qs[i]]), length(ed.E[qs[i + 1]]))) for i in 1:ℓ]   # rows: q_i, cols: q_{i+1}
         E1 = ed.E[q1]
         for s1 in eachindex(E1)
             ρ1 = ed.ρ[q1][s1]

@@ -150,39 +150,32 @@ localmodes(L::LocalSpace) = L.basis.modes
 localspace_sectors(L::LocalSpace) = SectorSpace(Dict(q => length(v) for (q, v) in L.sectors))
 
 """
-    localop(L, a) -> BlockOp
+    localop(L, a; T) -> BlockTensor
 
-The operator expression `a` (acting on the modes of `L` only) as a block
-operator on the local sector space. Within a sector the local basis states keep
-their ascending Fock order. `a` must be homogeneous.
+The operator expression `a` (acting on the modes of `L` only) as a rank-2
+block tensor on the site leg of `L` ([`site_leg`](@ref)). Within a sector the
+local basis states keep their ascending Fock order. `a` must be homogeneous.
 """
 function localop(L::LocalSpace{S}, a::OpExpr; T::Type = eltype(a)) where {S}
     Δ = opshift(a, L.charges)
     D = densematrix(a, L.basis; T = T)
-    V = localspace_sectors(L)
-    A = BlockOp{T}(V, V, Δ)
+    V = site_leg(L)
+    A = BlockTensor{T}(V, V, Δ)
     for (q, cols) in L.sectors
         r = fuse(q, Δ)
         haskey(L.sectors, r) || continue
         blk = D[L.sectors[r], cols]
-        any(!iszero, blk) && (A.blocks[q] = blk)
+        any(!iszero, blk) && setblock!(A, q, blk)
     end
     # every nonzero dense element must be accounted for by the blocks
-    nb = sum((count(!iszero, M) for M in values(A.blocks)); init = 0)
-    nb == count(!iszero, D) || throw(ArgumentError("operator is not homogeneous on the local space"))
+    count(!iszero, todense(A)) == count(!iszero, D) || throw(ArgumentError("operator is not homogeneous on the local space"))
     return A
 end
 
 """
-    parity_op(L) -> BlockOp
+    parity_op(L) -> BlockTensor
 
-The local parity `Z = (-1)^N` of the site, read off the `Pf` labels.
+The local parity `Z = (-1)^N` of the site, read off the `Pf` labels
+(`TNOps.parity_tensor` on the site leg).
 """
-function parity_op(L::LocalSpace{S}) where {S}
-    V = localspace_sectors(L)
-    Z = BlockOp{Float64}(V, V, neutral(S))
-    for (q, v) in L.sectors
-        Z.blocks[q] = (isodd(parity(q)) ? -1.0 : 1.0) * Matrix{Float64}(I, length(v), length(v))
-    end
-    return Z
-end
+parity_op(L::LocalSpace) = parity_tensor(site_leg(L))
