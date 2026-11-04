@@ -518,9 +518,9 @@ function discrete_data_atom(m::HubbardAtomModel, sp::Spectrum; σ = :up, channel
                             :spins => spins, :i12 => pair, :channel => channel, :rot => rot,
                             :eps_sigma => epsσ, :source => "HubbardAtom ED",
                             :occupations => Dict(s => real(thermal_average(sp, nσ(s))) for s in (:up, :dn)))
-    if rot === nothing
-        meta[:G0] = z -> Matrix(Diagonal(ComplexF64[1 / (z - e) for e in epsσ]))
-    end
+    # U = 0 propagator of the X-orbitals (C3); rotated orbitals d' = rot·d give rot·G0·rot†
+    G0d(z) = Matrix(Diagonal(ComplexF64[1 / (z - e) for e in epsσ]))
+    meta[:G0] = rot === nothing ? G0d : (z -> rot * G0d(z) * rot')
     return discrete_data_terms(terms, N; grid = grid, degtol = degtol, T = 1 / m.β,
                                tr2 = tr2, tr3 = tr3, meta = meta)
 end
@@ -1082,21 +1082,20 @@ end
 `Abra† C Aket` for a [`BlockKernel`](@ref) (Stage 4), accumulated block by block.
 """
 function sandwich(Abra::AbstractMatrix, C::BlockKernel, Aket::AbstractMatrix)
-    S = promote_type(eltype(Abra), eltype(Aket), ComplexF64)
-    out = zeros(S, size(Abra, 2), size(Aket, 2))
-    byα = Dict{Int,Vector{Int}}()
-    for (α, β) in keys(C.blocks)
-        push!(get!(() -> Int[], byα, α), β)
-    end
-    for (α, βs) in byα
-        ra = C.rows_bra[α]
-        tmp = zeros(S, length(ra), size(Aket, 2))
-        for β in βs
-            tmp .+= C.blocks[(α, β)] * view(Aket, C.rows_ket[β], :)
+    realC = all(b -> all(x -> iszero(imag(x)), b), values(C.blocks))
+    S = (realC && eltype(Abra) <: Real && eltype(Aket) <: Real) ? Float64 : ComplexF64
+    # CA = C * Aket, accumulated block by block (C is block-sparse), then one BLAS product
+    CA = zeros(S, C.Rbra, size(Aket, 2))
+    for ((α, β), blk) in C.blocks
+        ra = C.rows_bra[α]; rb = C.rows_ket[β]
+        if length(ra) == 1 && length(rb) == 1
+            c = S <: Real ? real(blk[1, 1]) : blk[1, 1]
+            @views CA[ra[1], :] .+= c .* Aket[rb[1], :]
+        else
+            @views CA[ra, :] .+= (S <: Real ? real.(blk) : blk) * Aket[rb, :]
         end
-        out .+= view(Abra, ra, :)' * tmp
     end
-    return out
+    return Matrix{S}(Abra)' * CA
 end
 
 """
@@ -1155,13 +1154,13 @@ U_{B†}† C^{(3,x)} Ū` (`L_{B†}×NL`), `V4[x][i3] = -Ū^T C^{(4,x)} U_B` (`
 `V5[y][i4] = -U_{B†}† C^{(5,y)} Ū^*` (`L_{B†}×NL`), `V6[y][i4] = Ū† C^{(6,y)} U_B`
 (`NL×L_B`), with `x ∈ (:q, :d)`, `y ∈ (:qd, :dd)`.
 """
-struct VKCouplings
-    V1::Matrix{ComplexF64}
-    V2::Matrix{ComplexF64}
-    V3::Dict{Symbol,Vector{Matrix{ComplexF64}}}
-    V4::Dict{Symbol,Vector{Matrix{ComplexF64}}}
-    V5::Dict{Symbol,Vector{Matrix{ComplexF64}}}
-    V6::Dict{Symbol,Vector{Matrix{ComplexF64}}}
+struct VKCouplings{T<:Number}
+    V1::Matrix{T}
+    V2::Matrix{T}
+    V3::Dict{Symbol,Vector{Matrix{T}}}
+    V4::Dict{Symbol,Vector{Matrix{T}}}
+    V5::Dict{Symbol,Vector{Matrix{T}}}
+    V6::Dict{Symbol,Vector{Matrix{T}}}
 end
 
 """
@@ -1172,16 +1171,18 @@ the signs of `V^{(4)}` and `V^{(5)}`; they cancel in `V̄^{(2)}`.
 """
 function couplings(d::DiscreteData, ch::VKChains, C)
     N = d.N
-    U = Matrix{ComplexF64}(ch.Ubar)
+    U = eltype(ch.Ubar) <: Real ? Matrix{Float64}(ch.Ubar) : Matrix{ComplexF64}(ch.Ubar)   # real data stay real
     Uc = conj.(U)
-    UB = Matrix{ComplexF64}(ch.UB); UBd = Matrix{ComplexF64}(ch.UBd)
+    UB = ch.UB; UBd = ch.UBd
     V1 = sandwich(U, C[1], U)
     V2 = sandwich(Uc, C[2], Uc)                         # Ū^T C Ū^*:  (Ū^*)† = Ū^T
     V3 = Dict(x => [sandwich(UBd, C[(3, x, i)], U) for i in 1:N] for x in (:q, :d))
     V4 = Dict(x => [-sandwich(Uc, C[(4, x, i)], UB) for i in 1:N] for x in (:q, :d))
     V5 = Dict(y => [-sandwich(UBd, C[(5, y, i)], Uc) for i in 1:N] for y in (:qd, :dd))
     V6 = Dict(y => [sandwich(U, C[(6, y, i)], UB) for i in 1:N] for y in (:qd, :dd))
-    return VKCouplings(V1, V2, V3, V4, V5, V6)
+    T = promote_type(eltype(V1), eltype(V2), (eltype(v) for D in (V3, V4, V5, V6) for vs in values(D) for v in vs)...)
+    cv(D) = Dict(k => [Matrix{T}(v) for v in vs] for (k, vs) in D)
+    return VKCouplings{T}(Matrix{T}(V1), Matrix{T}(V2), cv(V3), cv(V4), cv(V5), cv(V6))
 end
 
 # ============================================================================
@@ -1289,21 +1290,23 @@ function Ktilde(ch::VKChains, cp::VKCouplings, d::DiscreteData, ω12::Real, ω3:
     cd3 = _col(ch, cache, :Jd, -im * ω3) * NbT        # [(-iω3 - J̄_d)^{-1}]_{n1}N̄^T
     rBd = ch.NBd * _row(ch, cache, :Bd, im * ω12)     # N_{B†}[(iω12 - J_{B†})^{-1}]_{1m}
     cB = _col(ch, cache, :B, -im * ω12) * ch.NB       # [(-iω12 - J_B)^{-1}]_{n1}N_B
-    K1 = r3 * cp.V1 * c4                              # (VD7)
-    K2 = Matrix(transpose(rd4 * cp.V2 * cd3))         # (VD8): the product is [K_p2]_{i4 i3}
+    K1 = r3 * (cp.V1 * c4)                            # (VD7)
+    K2 = Matrix(transpose(rd4 * (cp.V2 * cd3)))       # (VD8): the product is [K_p2]_{i4 i3}
     K3 = zeros(ComplexF64, N, N); K4 = zeros(ComplexF64, N, N)
     K5 = zeros(ComplexF64, N, N); K6 = zeros(ComplexF64, N, N)
+    # (VD5) is linear in the couplings: contract each V with the resolvent vectors
+    # first, then dress with Σ^L / Σ^R (avoids forming V^{(a,T)} per frequency)
+    k3 = Dict(x => [rBd * (cp.V3[x][j] * c4) for j in 1:N] for x in (:q, :d))      # 1×N each
+    k4 = Dict(x => [rd4 * (cp.V4[x][j] * cB) for j in 1:N] for x in (:q, :d))      # N×1 each
+    k5 = Dict(y => [rBd * (cp.V5[y][j] * cd3) for j in 1:N] for y in (:qd, :dd))   # 1×N each
+    k6 = Dict(y => [r3 * (cp.V6[y][j] * cB) for j in 1:N] for y in (:qd, :dd))     # N×1 each
     for i3 in 1:N
-        V3T = cp.V3[:q][i3] - sum(ΣL[i3, j] * cp.V3[:d][j] for j in 1:N)    # (VD5)
-        V4T = cp.V4[:q][i3] - sum(ΣL[i3, j] * cp.V4[:d][j] for j in 1:N)
-        K3[i3, :] = vec(rBd * V3T * c4)               # (VD9)
-        K4[i3, :] = -vec(rd4 * V4T * cB)              # (VD10)
+        K3[i3, :] = vec(k3[:q][i3] - sum(ΣL[i3, j] * k3[:d][j] for j in 1:N))      # (VD9)
+        K4[i3, :] = -vec(k4[:q][i3] - sum(ΣL[i3, j] * k4[:d][j] for j in 1:N))     # (VD10)
     end
     for i4 in 1:N
-        V5T = cp.V5[:qd][i4] - sum(cp.V5[:dd][j] * ΣR[j, i4] for j in 1:N)
-        V6T = cp.V6[:qd][i4] - sum(cp.V6[:dd][j] * ΣR[j, i4] for j in 1:N)
-        K5[:, i4] = -vec(rBd * V5T * cd3)             # (VD11)
-        K6[:, i4] = vec(r3 * V6T * cB)                # (VD12)
+        K5[:, i4] = -vec(k5[:qd][i4] - sum(k5[:dd][j] * ΣR[j, i4] for j in 1:N))   # (VD11)
+        K6[:, i4] = vec(k6[:qd][i4] - sum(k6[:dd][j] * ΣR[j, i4] for j in 1:N))    # (VD12)
     end
     Ks = [K1, K2, K3, K4, K5, K6]
     ζ = vk_zeta()

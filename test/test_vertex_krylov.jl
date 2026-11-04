@@ -178,7 +178,7 @@ using LinearAlgebra
         sp = atom_spectrum(m; εd = εd, h = 0.07)
         dr = discrete_data_atom(m, sp; σ = [:up, :dn], i12 = (1, 1), εd = εd, h = 0.07, rot = rot)
         cr = vk_checks(vertex_krylov(dr))
-        @test cr[:C1] ≤ 1e-11 && cr[:C4] ≤ 1e-11 && cr[:C7] ≤ 1e-11 && cr[:C6] ≤ 1e-12
+        @test cr[:C1] ≤ 1e-11 && cr[:C3] ≤ 1e-11 && cr[:C4] ≤ 1e-11 && cr[:C7] ≤ 1e-11 && cr[:C6] ≤ 1e-12
         @test cr[:C8] ≤ 1e-10
         bx = cr[:box]; msk = .!isnan.(real.(bx.Kd[1, 1, :, :]))
         @test maximum(abs, bx.Kd[1, 2, :, :][msk] - bx.Kd[2, 1, :, :][msk]) > 1e-2   # genuinely asymmetric

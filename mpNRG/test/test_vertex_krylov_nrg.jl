@@ -3,8 +3,8 @@
 # SIAM Wilson chains, from ED of the chain (V2a exact, V2b binned) and from NRG
 # (V3a untruncated, V3b decoupled tail with truncation).
 #
-# Not part of the default runtests.jl: it takes well over 2 minutes (timings in
-# vertex_krylov_STATUS.md). Run with
+# Not part of the default runtests.jl: it takes about an hour and up to ~8 GB of
+# memory (Nch = 2 on the ExactGrid; timings in vertex_krylov_STATUS.md). Run with
 #   julia -t 4 --project=mpNRG/test mpNRG/test/test_vertex_krylov_nrg.jl
 #
 # Guaranteed tolerances ([VD] Theorem 2) are asserted; "report" columns are
@@ -49,6 +49,7 @@ end
 
     @testset "V2a ED, ExactGrid: Nch=$Nch field=$field $chan" for Nch in Nchs, field in (0.0, 0.05),
                                                                    chan in (:updn, :upup)
+        GC.gc()
         out = vk_case_ed(Nch, :exact, chan; field = field, bigfloat = Nch == 1)
         c = out[:checks]
         vk_assert_common(c; C1 = 1e-10, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9)
@@ -69,6 +70,7 @@ end
 
     @testset "V2b ED, LogGrid: Nch=$Nch field=$field $chan" for Nch in Nchs, field in (0.0, 0.05),
                                                                   chan in (:updn, :upup)
+        GC.gc()
         out = vk_case_ed(Nch, :log, chan; field = field)
         c = out[:checks]
         @test out[:data].meta[:nclamped] == 0
@@ -96,6 +98,7 @@ end
 
     @testset "V3a NRG (Nkeep = ∞) vs binned ED: Nch=$Nch field=$field $chan" for Nch in Nchs, field in (0.0, 0.05),
                                                                                 chan in (:updn, :upup)
+        GC.gc()
         out = vk_case_nrg(Nch, chan; field = field)
         @test out[:diff].W ≤ 1e-13 && out[:diff].wB ≤ 1e-13 && out[:diff].s ≤ 1e-13
         vk_assert_common(out[:checks]; C1 = 1e-10, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8)

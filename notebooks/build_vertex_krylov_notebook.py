@@ -72,6 +72,10 @@ display and plot these results. Timings per case are printed and collected in `T
 
 code(r"""
 R = Dict{String,Any}()      # all results, keyed by case label
+# VK_NB_SMOKE=1: structural test run of this notebook on the Nch = 1 data only (the Nch = 2 labels then
+# point to the Nch = 1 results). The committed notebook is executed without it.
+const SMOKE = get(ENV, "VK_NB_SMOKE", "0") == "1"
+NCHS = SMOKE ? (1,) : (1, 2)
 TIMES = Dict{String,Any}()
 tstart = time()
 
@@ -102,9 +106,14 @@ R["V1 atom N=2 rotated"] = atom_case(0.1, :updn; σ = [:up, :dn], i12 = (1, 1), 
 @printf("V1 done: %.1f s\n", time() - tstart)
 
 # --- V2: Wilson chain, ED (exact and binned) ---------------------------------------------
-for Nch in (1, 2), field in (0.0, 0.05), chan in (:updn, :upup), gk in (:exact, :log)
+KEEP = Set(["V2 Nch=2 B=0.0 updn exact", "V2 Nch=2 B=0.0 updn log", "V2 Nch=1 B=0.0 updn exact", "V3a Nch=2 B=0.0 updn"])
+SMOKE && (KEEP = union(KEEP, Set(replace.(collect(KEEP), "Nch=2" => "Nch=1"))))
+for Nch in NCHS, field in (0.0, 0.05), chan in (:updn, :upup), gk in (:exact, :log)
     t0 = time()
-    R["V2 Nch=$Nch B=$field $chan $gk"] = vk_case_ed(Nch, gk, chan; field = field, bigfloat = gk === :exact)
+    k = "V2 Nch=$Nch B=$field $chan $gk"
+    # BigFloat particle chain only for Nch ≤ 1 (Nch = 2: R ≈ 2600 rows, L ≈ 2600 steps; deviation in STATUS)
+    R[k] = vk_case_ed(Nch, gk, chan; field = field, bigfloat = gk === :exact && Nch == 1, keep = k in KEEP)
+    GC.gc()
     @printf("V2 Nch=%d B=%.2f %-5s %-5s: %6.1f s\n", Nch, field, chan, gk, time() - t0)
 end
 t0 = time()
@@ -116,9 +125,11 @@ R["V2 block dn"] = vk_case_ed(1, :exact, :upup; field = 0.05, σ = :dn)
 R["V2 Nch=0 B=0.0 updn exact"] = vk_case_ed(0, :exact, :updn; bigfloat = true)
 
 # --- V3a: untruncated NRG ----------------------------------------------------------------
-for Nch in (1, 2), field in (0.0, 0.05), chan in (:updn, :upup)
+for Nch in NCHS, field in (0.0, 0.05), chan in (:updn, :upup)
     t0 = time()
-    R["V3a Nch=$Nch B=$field $chan"] = vk_case_nrg(Nch, chan; field = field)
+    k = "V3a Nch=$Nch B=$field $chan"
+    R[k] = vk_case_nrg(Nch, chan; field = field, keep = k in KEEP)
+    GC.gc()
     @printf("V3a Nch=%d B=%.2f %-5s: %6.1f s\n", Nch, field, chan, time() - t0)
 end
 
@@ -129,6 +140,12 @@ for chan in (:updn, :upup)
     R["V3b $chan"] = vk_case_nrg(3, chan; Nkeep = 40, chains = chs)
     @printf("V3b %-5s: %6.1f s\n", chan, time() - t0)
 end
+if SMOKE
+    for k in collect(keys(R))
+        occursin("Nch=1", k) && (R[replace(k, "Nch=1" => "Nch=2")] = R[k])
+    end
+end
+println("SMOKE = ", SMOKE)
 @printf("all cases: %.1f min\n", (time() - tstart) / 60)
 """)
 
@@ -150,7 +167,7 @@ measured only. Generated from `R` by the same check functions as the tests.
 code(r"""
 ROWS = Any[]
 function row!(phase, case, chan, check, val, tol; note = "")
-    st = tol === nothing ? "report" : (val ≤ tol ? "pass" : "FAIL")
+    st = tol === nothing ? "report" : isnan(val) ? "n/a" : (val ≤ tol ? "pass" : "FAIL")
     push!(ROWS, (phase = phase, case = case, chan = chan, check = check, value = val, tol = tol, status = st, note = note))
 end
 TOL = Dict("V1" => (C1 = 1e-11, C34 = 1e-11, C56 = 1e-12, C7 = 1e-11, C8 = 1e-10),
@@ -164,6 +181,7 @@ function rows_for!(phase, case, chan, out)
     row!(phase, case, chan, "C2", c[:C2], nothing)
     row!(phase, case, chan, "C3", c[:C3], t.C34)
     row!(phase, case, chan, "C4", c[:C4], t.C34)
+    haskey(out, :big) && row!(phase, case, chan, "C4 (BigFloat chain)", out[:big].C4, t.C34)
     haskey(out, :stab) && row!(phase, case, chan, "C4 (stabilized)", out[:stab].C4, t.C34)
     row!(phase, case, chan, "C5", c[:C5], t.C56)
     row!(phase, case, chan, "C6", c[:C6], t.C56)
@@ -262,8 +280,10 @@ println("3. odd bin map: LogGrid ", all(x -> HA.bin_of(bg, -x) == bg.bar[HA.bin_
 """)
 
 code(r"""
-# 4. (I3) worked entry: s2[α,β][a,b] = S(ᾱ, β̄)[X_a, B, X_b†] for the atom, (↑↓), T = 0.1
-d = R["V1 atom T=0.1 updn"][:data]
+# 4. (I3) worked entry: s2[α,β][a,b] = S(ᾱ, β̄)[X_a, B, X_b†] for the atom, channel (↑↑) (B = q↑↑), T = 0.1
+#    (in the (↑↓) channel of the atom the family s2 vanishes identically)
+d = R["V1 atom T=0.1 upup"][:data]
+ops = HA.vk_atom_operators(m; spins = [:up], i12 = (:up, :up))
 println("(I3): s1 = S(α,β)[X_a†,B,X_b], s2 = S(ᾱ,β̄)[X_a,B,X_b†], s3 = S(α,β)[B,x,X_b], s4 = S(ᾱ,β)[X_a,x,B],")
 println("      s5 = S(α,β̄)[B,y,X_b†], s6 = S(α,β)[X_a†,y,B]")
 (k, blk) = first(sort(collect(d.s2); by = first))
@@ -613,8 +633,10 @@ Algorithm 2 with $\Pi=1-vv^\dagger$ keeps running after the cyclic space of $Qq^
 single-particle invariant subspace $\mathbb K_0\ominus d^\dagger$ ([VD] Lemma 12), where $r_n=\bar U_n^\dagger Dv$ is
 $O(1)$. The guaranteed tolerance $10^{-9}$ (V2a) is violated in every V2a chain case (table above). Evidence:
 
-* the unstabilized chain is longer than the stabilized one by exactly $\dim\Omega-1$ = number of bath levels
-  (e.g. 16-state chain: $L=15=\dim{\rm ran}\,P$ vs 14), and the leak appears only in its last levels;
+* the leak $|r_n-\delta_{n1}\bar N|/\bar N$ starts at $\sim10^{-15}$ at $n=1$ and grows roughly exponentially along
+  the chain (plot "bath leakage" in Sec. 3), crossing $10^{-9}$ after $\sim130$ levels for the 64-state chain and
+  reaching $O(1)$ in the last levels; the unstabilized chain is longer than the stabilized one by
+  $\dim\Omega-1$ = number of bath levels (16-state chain: $L=15=\dim{\rm ran}\,P$ vs 14);
 * **BigFloat (128 bit) gives the same leak** (same chain length, same C4 to two digits), so the seed is not Float64
   rounding in the Lanczos recursion but the $\sim10^{-16}$ accuracy with which the Float64 ED data satisfy the equation
   of motion; the Lanczos recursion amplifies this component until the residual exceeds the termination threshold

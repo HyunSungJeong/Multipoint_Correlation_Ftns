@@ -215,7 +215,7 @@ function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing), stabilize::B
             m = .!isnan.(real.(bx.Kd))
             zs = HA.vk_testpoints(d)
             dΣ = maximum(z -> maximum(abs, HA.sigma_chain(chs, z) - HA.sigma_chain(res.ch, z)), zs)
-            out[:stab] = (res = rs, Omega_dim = chs.diag[:Omega_dim], Omega_overlap = chs.diag[:Omega_overlap],
+            out[:stab] = (Omega_dim = chs.diag[:Omega_dim], Omega_overlap = chs.diag[:Omega_overlap],
                           C4 = HA.check_C4(chs), C1 = HA.check_C1(d, chs), L = HA.nblocks(chs.Jbar),
                           C8 = HA.check_C8(bxs).value, dK = maximum(abs, bxs.Kt[m] - bx.Kt[m]) / maximum(abs, bx.Kd[m]),
                           dSigma = dΣ, profile = HA.leakage_profile(chs))
@@ -241,13 +241,32 @@ function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing), stabilize::B
 end
 
 """
+    vk_lighten!(out) -> out
+
+Drop the heavy objects of a [`vk_run`](@ref) result (kernels, couplings,
+coordinates), keeping the checks, the box, and the chain coefficients
+(`out[:chain]`: `ε̄_n`, `t̄_{n+1}`, `a_n`, `b_n`, the leakage profile). Used by the
+notebook to keep memory bounded.
+"""
+function vk_lighten!(out)
+    res = out[:res]
+    res === nothing && return out
+    ch = res.ch
+    out[:chain] = (eps = [e[1, 1] for e in ch.Jbar.eps], t = [t[1, 1] for t in ch.Jbar.lower],
+                   a = [e[1, 1] for e in ch.JB.eps], b = [t[1, 1] for t in ch.JB.lower],
+                   profile = HA.leakage_profile(ch))
+    out[:res] = nothing
+    return out
+end
+
+"""
     vk_case_ed(Nch, gridkind, chan; field = 0.0, T = 0.05, bigfloat = false) -> Dict
 
 One V2 case: ED of the Wilson chain with sites `-1..Nch`, data on an `ExactGrid`
 (`gridkind = :exact`, V2a) or binned on [`vk_grid`](@ref) (`:log`, V2b), channel
 `chan`, then [`vk_run`](@ref).
 """
-function vk_case_ed(Nch::Integer, gridkind::Symbol, chan::Symbol; field = 0.0, T = 0.05, bigfloat::Bool = false,
+function vk_case_ed(Nch::Integer, gridkind::Symbol, chan::Symbol; field = 0.0, T = 0.05, bigfloat::Bool = false, keep::Bool = true,
                     σ = :up, i12 = nothing)
     m = vk_model(; field = field)
     chs = wilson_chains(m, Nch)
@@ -255,6 +274,7 @@ function vk_case_ed(Nch::Integer, gridkind::Symbol, chan::Symbol; field = 0.0, T
     g = gridkind === :exact ? :exact : vk_grid()
     t0 = time(); d = discrete_data_ed(m, chs, Nch, T, g; σ = σ, channel = chan, i12 = i12); timings[:data] = time() - t0
     out = vk_run(d; bigfloat = bigfloat, timings = timings)
+    keep || vk_lighten!(out)
     out[:data] = d
     return out
 end
@@ -267,7 +287,7 @@ data on [`vk_grid`](@ref) from `psf(run, f, ops; grid)`, then [`vk_run`](@ref);
 with `compare_ed`, also the binned ED data of the same chain on the same grid,
 its run, and [`data_diff`](@ref).
 """
-function vk_case_nrg(Nch::Integer, chan::Symbol; field = 0.0, T = 0.05, Nkeep::Integer = typemax(Int),
+function vk_case_nrg(Nch::Integer, chan::Symbol; field = 0.0, T = 0.05, Nkeep::Integer = typemax(Int), keep::Bool = true,
                      chains = nothing, compare_ed::Bool = true)
     m = vk_model(; field = field)
     g = vk_grid()
@@ -285,9 +305,10 @@ function vk_case_nrg(Nch::Integer, chan::Symbol; field = 0.0, T = 0.05, Nkeep::I
         out[:ed_data] = de
         out[:diff] = data_diff(d, de)
         d.meta[:G0] = de.meta[:G0]
-        out[:ed] = vk_run(de)
+        out[:ed] = vk_lighten!(vk_run(de))
     end
     merge!(out, vk_run(d; timings = timings))
+    keep || vk_lighten!(out)
     out[:data] = d
     return out
 end
