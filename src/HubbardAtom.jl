@@ -77,7 +77,19 @@ export AbstractModel, ImpurityModel, HubbardAtomModel, impurity_operators, defau
        psf4_tables_chain, psf2_tables_chain,
        PSFKrylovInput, PSFKrylov, psf_krylov_input, psf_krylov, jacobi_from_measure, jacobi_matrix,
        resolvent_column, resolvent_krylov, reconstruct_psf,
-       BASIS_LABELS, DIM
+       BASIS_LABELS, DIM,
+       # vertex_krylov.jl: discrete Krylov representation of the 3p vertex ([VD] Algorithm 2)
+       ExactGrid, BinnedGrid, bin_of, check_grid, VKBlocks, DiscreteData, vk_psf_tuples,
+       build_discrete_data, discrete_data_terms, atom_hamiltonian, atom_spectrum, channel_pair,
+       vk_atom_operators, discrete_data_atom, data_sanity,
+       coords, projected_lanczos, BlockJacobi, nblocks, jacobi_dense, resolvent_col, resolvent_row,
+       single_particle_basis, VKChains, hole_jacobi, bosonic_chain, chains,
+       BlockKernel, kernel, sandwich, kernels, VKCouplings, couplings,
+       Gtilde, sigmas, sigma_chain, VK_PERMS, vk_zeta, vk_fermionic, VKResolventCache, Ktilde,
+       direct_caches, direct_correlators, Kdirect, VKResult, vertex_krylov, vk_testpoints,
+       check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C8, leakage_profile,
+       matsubara_box, K_box, zacinskis_check, atom_closed_form, vk_checks,
+       psf_convention_check, liouvillian_3p, liouvillian_regular
 
 """
     AbstractModel
@@ -370,5 +382,6 @@ include("heatmap.jl")      # vertex heat maps: grids, PSF-level subtraction, KF 
 include("psf_chain.jl")    # chain-walk PSFs and Dict peak merging (AIM task I1, I2)
 include("psf_lanczos.jl")  # Liouvillian matrix elements of 3p PSFs from PSF data (PSF Lanczos task)
 include("aim.jl")          # Anderson impurity model with a discrete bath
+include("vertex_krylov.jl") # discrete Krylov representation of the 3p vertex (vertex_krylov task)
 
 end # module
