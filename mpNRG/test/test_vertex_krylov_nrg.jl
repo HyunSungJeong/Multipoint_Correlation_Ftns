@@ -3,7 +3,7 @@
 # SIAM Wilson chains, from ED of the chain (V2a exact, V2b binned) and from NRG
 # (V3a untruncated, V3b decoupled tail with truncation).
 #
-# Not part of the default runtests.jl: it takes about an hour and up to ~8 GB of
+# Not part of the default runtests.jl: it takes about 90 min and up to ~8 GB of
 # memory (Nch = 2 on the ExactGrid; timings in vertex_krylov_STATUS.md). Run with
 #   julia -t 4 --project=mpNRG/test mpNRG/test/test_vertex_krylov_nrg.jl
 #

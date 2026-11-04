@@ -160,6 +160,26 @@ assertions); executed checks: `TNOps/notebooks/tnops_checks.ipynb`.
 | `mpNRG/docs/TNOPS_REFACTOR.md` | 4.3 | `nrg/tensors.jl` contractions vs the pre-refactor implementation (frozen fixtures) and vs dense Jordan–Wigner | ≤ 1e-13 |
 | `mpNRG/docs/TNOPS_REFACTOR.md` | 8 | regression baseline: 4 SIAM runs, all mpNRG quantities vs the pre-refactor code; kept counts | ≤ 3.7e-13 rel.; identical |
 
+### vertex_krylov (Step 1)
+
+[VD] Algorithm 2 (`src/vertex_krylov.jl`): from discrete 2p and 3p PSF weights on one symmetric grid, the Jacobi
+matrices `J̄`, `J̄_d = -J̄ᵀ`, `𝕁_B`, `𝕁_{B†}`, the couplings (VD27) and `Σᴸ`, `Σᴿ`, assembled into the Matsubara
+regular part `K̃⁽¹²⁾` of Lihm's 3p estimator and compared with the estimator evaluated directly from the same PSFs
+(`regular_sum`). Data from HubbardAtom ED, mpNRG ED of Wilson chains (ExactGrid and LogGrid) and mpNRG NRG
+(`mpNRG/test/vertex_krylov_adapter.jl`). Record: [`vertex_krylov_STATUS.md`](vertex_krylov_STATUS.md); all results:
+`notebooks/vertex_krylov.ipynb` (314-row test matrix). Tests: `test/test_vertex_krylov.jl` (414 assertions, in
+`runtests.jl`), `mpNRG/test/test_vertex_krylov_nrg.jl` (841 assertions + 8 `@test_broken` for F1, 90 min, not in the default suite). Step 2 (V3c) not started.
+
+| Sheet | Item | Check | Accuracy |
+|:--|:--|:--|:--|
+| `vertex_krylov_task.md` | V0 | PSF convention, ζ signs, odd bin maps, (I3) map, `regular_sum` frequency convention vs [3p] Liouvillian form; data sanity (sum rules, 3p totals, PSD, hole symmetry) | ≤ 2e-15 |
+| `vertex_krylov_task.md` | V1 | atom `U = 1`, `εd = -0.3`, `T = 0.1, 0.5`: closed-form chain; C1–C8; `N = 2` block test (also rotated complex orbitals) | ≤ 4e-14 (C8 ≤ 1e-15) |
+| `vertex_krylov_task.md` | V2a | Wilson-chain ED, ExactGrid, 64/256 states, with/without field: C1, C3, C5–C8 | ≤ 3e-13 |
+| `vertex_krylov_task.md` | V2a | C4 bath leakage, Algorithm 2 as specified / stabilized ([VD] Prop. 13) | 0.20–0.85 (**fails**, also in BigFloat; finding F1) / ≤ 1.3e-14 |
+| `vertex_krylov_task.md` | V2b | same ED binned on the LogGrid: C1, C5–C8 (C3, C4 report) | ≤ 2e-13 |
+| `vertex_krylov_task.md` | V3a | untruncated NRG vs binned ED: data; C1, C5–C8 | ≤ 1e-14; ≤ 2e-13 |
+| `vertex_krylov_task.md` | V3b | decoupled tail, truncated NRG (`N_keep = 40`) vs ED: data; C1, C5–C8 | ≤ 4e-15; ≤ 4e-14 |
+
 ## Findings
 
 **Eq. (85) is right; the PDF text layer is not.** The text layer puts both
