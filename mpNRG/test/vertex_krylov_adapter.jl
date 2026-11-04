@@ -190,42 +190,44 @@ vk_model(; field = 0.0) = siam(U = 0.5, εd = -0.1, Δ = 0.1, B = field)
 vk_grid() = LogGrid(emin = 1e-5, emax = 10.0, ndec = 16)
 
 """
-    vk_run(d; G0 = d.meta[:G0], stabilize_report = exact, bigfloat = false) -> NamedTuple
+    vk_run(d; G0 = d.meta[:G0], diagnostic = exact, bigfloat = false) -> Dict
 
-Run Algorithm 2 on `d` and all checks (`HA.vk_checks`), plus, for exact data,
-the stabilized particle chain ([VD] Prop. 13: `Ω` dimension, `‖Ω†Ū‖`, C4, and the
-change of `Σ^S` and `K̃` on the box), and optionally the particle chain in
-`BigFloat` (precision 128): C4, chain length, and the largest deviation of the
-Float64 Jacobi blocks from the BigFloat ones over the leading blocks.
+Run Algorithm 2 on `d` (`HA.vertex_krylov`; for exact data the Stage-2 default is
+the stabilized particle chain of [VD] Prop. 13, amendment A2) and all checks
+(`HA.vk_checks`). For exact data also the diagnostic `out[:unstab]`: the
+unstabilized chain (`Π = 1 - vv†`) with its C4 (report, amendment A1), C1,
+length, leakage profile, and the change of `Σ^S` and `K̃` against the default
+chain. With `bigfloat`, the particle chain in `BigFloat` (precision 128):
+`out[:big]` for the default chain (C4, length, residual, deviation of the Float64
+Jacobi blocks, `n_agree`), and `out[:big_unstab]` (C4, length) for the
+unstabilized one.
 """
-function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing), stabilize::Bool = get(d.meta, :grid_kind, :binned) === :exact,
+function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing),
+                diagnostic::Bool = get(d.meta, :grid_kind, :binned) === :exact,
                 bigfloat::Bool = false, timings = Dict{Symbol,Float64}())
+    exact = get(d.meta, :grid_kind, :binned) === :exact
     t0 = time(); res = HA.vertex_krylov(d); timings[:algorithm] = time() - t0
     t0 = time(); c = HA.vk_checks(res; G0 = G0); timings[:checks] = time() - t0
     out = Dict{Symbol,Any}(:res => res, :checks => c, :timings => timings)
-    if stabilize
+    if diagnostic
         t0 = time()
-        begin
-            chs = HA.chains(d; stabilize = true)
-            Cs, kds = HA.kernels(d, chs)
-            cps = HA.couplings(d, chs, Cs)
-            rs = HA.VKResult(d, chs, Cs, kds, cps)
-            bxs = HA.K_box(rs)
-            bx = c[:box]
-            m = .!isnan.(real.(bx.Kd))
-            zs = HA.vk_testpoints(d)
-            dΣ = maximum(z -> maximum(abs, HA.sigma_chain(chs, z) - HA.sigma_chain(res.ch, z)), zs)
-            out[:stab] = (Omega_dim = chs.diag[:Omega_dim], Omega_overlap = chs.diag[:Omega_overlap],
-                          C4 = HA.check_C4(chs), C1 = HA.check_C1(d, chs), L = HA.nblocks(chs.Jbar),
-                          C8 = HA.check_C8(bxs).value, dK = maximum(abs, bxs.Kt[m] - bx.Kt[m]) / maximum(abs, bx.Kd[m]),
-                          dSigma = dΣ, profile = HA.leakage_profile(chs))
-        end
-        timings[:stabilized] = time() - t0
+        chu = HA.chains(d; stabilize = false, cs = res.ch.cs)
+        Cu, kdu = HA.kernels(d, chu)
+        cpu = HA.couplings(d, chu, Cu)
+        bxu = HA.K_box(HA.VKResult(d, chu, Cu, kdu, cpu))
+        bx = c[:box]
+        m = .!isnan.(real.(bx.Kd))
+        zs = HA.vk_testpoints(d)
+        dΣ = maximum(z -> maximum(abs, HA.sigma_chain(chu, z) - HA.sigma_chain(res.ch, z)), zs)
+        out[:unstab] = (C4 = HA.check_C4(chu), C1 = HA.check_C1(d, chu), L = HA.nblocks(chu.Jbar),
+                        C8 = HA.check_C8(bxu).value, dK = maximum(abs, bxu.Kt[m] - bx.Kt[m]) / maximum(abs, bx.Kd[m]),
+                        dSigma = dΣ, profile = HA.leakage_profile(chu))
+        timings[:unstabilized] = time() - t0
     end
     if bigfloat
         t0 = time()
         setprecision(BigFloat, 128) do
-            chb = HA.chains(d; T = BigFloat)
+            chb = HA.chains(d; T = BigFloat, stabilize = exact)
             L = min(HA.nblocks(chb.Jbar), HA.nblocks(res.ch.Jbar))
             scale = maximum(abs, d.b[[β for β in eachindex(d.b) if !iszero(d.W[β])]])
             dev = [Float64(max(maximum(abs, chb.Jbar.eps[n] - res.ch.Jbar.eps[n]),
@@ -234,6 +236,11 @@ function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing), stabilize::B
             out[:big] = (C4 = Float64(HA.check_C4(chb)), L = HA.nblocks(chb.Jbar), resid = chb.diag[:particle][:resid],
                          orth = chb.diag[:particle][:orth_loss], dev = dev, n_agree = bad === nothing ? L : bad - 1,
                          profile = HA.leakage_profile(chb), C1 = HA.check_C1(d, chb))
+            if exact
+                chbu = HA.chains(d; T = BigFloat, stabilize = false)
+                out[:big_unstab] = (C4 = Float64(HA.check_C4(chbu)), L = HA.nblocks(chbu.Jbar),
+                                    profile = HA.leakage_profile(chbu))
+            end
         end
         timings[:bigfloat] = time() - t0
     end

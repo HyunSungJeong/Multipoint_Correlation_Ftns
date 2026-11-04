@@ -156,10 +156,15 @@ The full Step-1 test matrix (task sheet Sec. 6): phase × case × channel × che
 tolerance, and pass / FAIL / report. **Guaranteed** tolerances follow from [VD] Theorem 2 (stop rule); "report" means
 measured only. Generated from `R` by the same check functions as the tests.
 
-* C1 self-energy (algebraic), C2 Zacinskis cross-check ($\Sigma^{\rm S}$, spectra and weights of $\Omega'$; report),
-  C3 Dyson, C4 bath leakage, C5 hole symmetry, C6 Gauss quadrature, C7 factorization residual, C8 assembly.
-* For exact data C4 is listed twice: for the particle chain of Algorithm 2 (projector $1-vv^\dagger$) and for the
-  stabilized chain of [VD] Prop. 13 (projector $1-\Omega\Omega^\dagger$).
+* C1 self-energy (algebraic), C2 Zacinskis cross-check, C3 Dyson, C4 bath leakage, C5 hole symmetry, C6 Gauss
+  quadrature, C7 factorization residual, C8 assembly.
+* **Amended criteria** (task-sheet amendment of `vertex_krylov_STATUS.md`): (A1) for exact data the guaranteed C4 is
+  that of the stabilized particle chain of [VD] Prop. 13 (projector $1-\Omega\Omega^\dagger$); C4 of the unstabilized
+  chain ($1-vv^\dagger$) is report. (A2) For exact data the stabilized chain is the default output of Stage 2; the
+  unstabilized chain is kept as a diagnostic. (A3) C2: the invariants ($\Sigma^{\rm S}$, spectra and first-block
+  weights of $\Omega'$, $S=\bar N^2$, start block) are guaranteed at $10^{-10}$; the Jacobi-block agreement
+  (`n_agree`, finding F2) is report.
+* V3c (physical chain, truncated NRG) is report only, every check.
 * C8 is relative to $\max|K^{\rm direct}|$, except where $K^{\rm direct}\equiv0$ (marked `†`, see deviation 4 of
   `vertex_krylov_STATUS.md`).
 """)
@@ -170,19 +175,26 @@ function row!(phase, case, chan, check, val, tol; note = "")
     st = tol === nothing ? "report" : isnan(val) ? "n/a" : (val ≤ tol ? "pass" : "FAIL")
     push!(ROWS, (phase = phase, case = case, chan = chan, check = check, value = val, tol = tol, status = st, note = note))
 end
-TOL = Dict("V1" => (C1 = 1e-11, C34 = 1e-11, C56 = 1e-12, C7 = 1e-11, C8 = 1e-10),
-           "V2a" => (C1 = 1e-10, C34 = 1e-9, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9),
-           "V2b" => (C1 = 1e-10, C34 = nothing, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9),
-           "V3a" => (C1 = 1e-10, C34 = nothing, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8),
-           "V3b" => (C1 = 1e-10, C34 = nothing, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8))
+TOL = Dict("V1" => (C1 = 1e-11, C2 = 1e-10, C34 = 1e-11, C56 = 1e-12, C7 = 1e-11, C8 = 1e-10),
+           "V2a" => (C1 = 1e-10, C2 = 1e-10, C34 = 1e-9, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9),
+           "V2b" => (C1 = 1e-10, C2 = 1e-10, C34 = nothing, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9),
+           "V3a" => (C1 = 1e-10, C2 = 1e-10, C34 = nothing, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8),
+           "V3b" => (C1 = 1e-10, C2 = 1e-10, C34 = nothing, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8),
+           "V3c" => (C1 = nothing, C2 = nothing, C34 = nothing, C56 = nothing, C7 = nothing, C8 = nothing))
 function rows_for!(phase, case, chan, out)
     t = TOL[phase]; c = out[:checks]
     row!(phase, case, chan, "C1", c[:C1], t.C1)
-    row!(phase, case, chan, "C2", c[:C2], nothing)
+    row!(phase, case, chan, "C2", c[:C2], t.C2)
+    haskey(c, :zac) && row!(phase, case, chan, "C2 blocks n_agree/L", c[:zac].n_agree / c[:zac].L_chain, nothing)
     row!(phase, case, chan, "C3", c[:C3], t.C34)
-    row!(phase, case, chan, "C4", c[:C4], t.C34)
-    haskey(out, :big) && row!(phase, case, chan, "C4 (BigFloat chain)", out[:big].C4, t.C34)
-    haskey(out, :stab) && row!(phase, case, chan, "C4 (stabilized)", out[:stab].C4, t.C34)
+    if haskey(out, :unstab)          # exact data: the default chain is the stabilized one (A1, A2)
+        row!(phase, case, chan, "C4 (stabilized, default)", c[:C4], t.C34)
+        row!(phase, case, chan, "C4 (unstabilized, diagnostic)", out[:unstab].C4, nothing)
+    else
+        row!(phase, case, chan, "C4", c[:C4], t.C34)
+    end
+    haskey(out, :big) && row!(phase, case, chan, "C4 (BigFloat, default chain)", out[:big].C4, t.C34)
+    haskey(out, :big_unstab) && row!(phase, case, chan, "C4 (BigFloat, unstabilized)", out[:big_unstab].C4, nothing)
     row!(phase, case, chan, "C5", c[:C5], t.C56)
     row!(phase, case, chan, "C6", c[:C6], t.C56)
     row!(phase, case, chan, "C7", c[:C7], t.C7)
@@ -244,8 +256,8 @@ else
     fc = unique([r.check for r in FAILS])
     println("checks affected: ", join(fc, ", "))
 end
-println("\nOpen findings: F1 (C4 without stabilization, see Sec. 7); F2 (C2 Jacobi blocks agree only on leading blocks);",
-        " F3 (K ≡ 0 in the atom's (↑↑) channel).")
+println("\nOpen findings (Sec. 7): F1 (the unstabilized chain leaks, C4 report under A1); F2 (C2 Jacobi blocks agree only on",
+        " leading blocks, report under A3); F3 (K ≡ 0 in the atom's (↑↑) channel); V3c (Sec. 6, report only).")
 """)
 
 # ------------------------------------------------------------------------------------------
@@ -395,11 +407,11 @@ which binned data violate by the bin width).
 code(r"""
 function chain_table(keys)
     @printf("%-34s %6s %5s %4s %4s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s\n", "case", "bins", "R", "L", "L_B", "C1", "C2", "C3", "C4",
-            "C4 stab", "C5", "C6", "C7", "C8", "t [s]")
+            "C4 unst", "C5", "C6", "C7", "C8", "t [s]")
     for k in keys
         o = R[k]; c = o[:checks]
         @printf("%-34s %6d %5d %4d %4d %9.1e %9.1e %9.1e %9.1e %9s %9.1e %9.1e %9.1e %9.1e %9.1f\n", k, c[:nbins], c[:R], c[:L], c[:LB],
-                c[:C1], c[:C2], c[:C3], c[:C4], haskey(o, :stab) ? @sprintf("%.1e", o[:stab].C4) : "—", c[:C5], c[:C6], c[:C7], c[:C8],
+                c[:C1], c[:C2], c[:C3], c[:C4], haskey(o, :unstab) ? @sprintf("%.1e", o[:unstab].C4) : "—", c[:C5], c[:C6], c[:C7], c[:C8],
                 sum(values(o[:timings])))
     end
 end
@@ -460,15 +472,16 @@ savefig("couplings", fig)
 """)
 
 code(r"""
-# bath leakage |r_n - δ_n1 N̄| / N̄: Algorithm 2 (Float64, BigFloat) and the stabilized chain
+# bath leakage |r_n - δ_n1 N̄| / N̄: the default (stabilized, Prop. 13) chain and the unstabilized diagnostic
 fig = Figure(size = (1300, 420))
 for (j, k) in enumerate(("V2 Nch=0 B=0.0 updn exact", "V2 Nch=1 B=0.0 updn exact", "V2 Nch=2 B=0.0 updn exact"))
     o = R[k]
     ax = Axis(fig[1, j]; yscale = log10, xlabel = "n", ylabel = "|rₙ - δₙ₁N̄| / N̄", title = k)
-    p = HA.leakage_profile(o[:res].ch)
-    scatterlines!(ax, eachindex(p), fl.(p); markersize = 4, label = "Π = 1 - vv† (Float64)")
-    haskey(o, :big) && scatterlines!(ax, eachindex(o[:big].profile), fl.(o[:big].profile); markersize = 4, linestyle = :dash, label = "Π = 1 - vv† (BigFloat)")
-    scatterlines!(ax, eachindex(o[:stab].profile), fl.(o[:stab].profile); markersize = 4, label = "Π = 1 - ΩΩ† (Prop. 13)")
+    pu = o[:unstab].profile
+    scatterlines!(ax, eachindex(pu), fl.(pu); markersize = 4, label = "Π = 1 - vv† (Float64, diagnostic)")
+    haskey(o, :big_unstab) && scatterlines!(ax, eachindex(o[:big_unstab].profile), fl.(o[:big_unstab].profile); markersize = 4, linestyle = :dash, label = "Π = 1 - vv† (BigFloat)")
+    p = haskey(o, :chain) ? o[:chain].profile : HA.leakage_profile(o[:res].ch)
+    scatterlines!(ax, eachindex(p), fl.(p); markersize = 4, label = "Π = 1 - ΩΩ† (Prop. 13, default)")
     hlines!(ax, [1e-9]; color = :gray, linestyle = :dot)
     j == 1 && axislegend(ax; position = :lt)
 end
@@ -477,10 +490,10 @@ savefig("bath_leakage", fig)
 
 code(r"""
 for k in ("V2 Nch=0 B=0.0 updn exact", "V2 Nch=1 B=0.0 updn exact", "V2 Nch=1 B=0.0 upup exact", "V2 Nch=2 B=0.0 updn exact", "V2 Nch=2 B=0.05 upup exact")
-    o = R[k]; s = o[:stab]
-    @printf("%-28s R=%5d  L=%4d (stab %4d, BigFloat %s)  C4 = %.2e (BigFloat %s, stab %.1e)  dim Ω = %d  ‖Ω†Ū‖ = %.1e  ΔΣ^S = %.1e  ΔK̃ = %.1e\n",
-            k, o[:checks][:R], o[:checks][:L], s.L, haskey(o, :big) ? string(o[:big].L) : "—", o[:checks][:C4],
-            haskey(o, :big) ? @sprintf("%.2e", o[:big].C4) : "—", s.C4, s.Omega_dim, s.Omega_overlap, s.dSigma, s.dK)
+    o = R[k]; u = o[:unstab]; c = o[:checks]
+    @printf("%-28s R=%5d  L=%4d (unstab %4d, BigFloat unstab %s)  C4 = %.1e (unstab %.2e, BigFloat unstab %s)  dim Ω = %d  ‖Ω†Ū‖ = %.1e  ΔΣ^S = %.1e  ΔK̃ = %.1e\n",
+            k, c[:R], c[:L], u.L, haskey(o, :big_unstab) ? string(o[:big_unstab].L) : "—", c[:C4], u.C4,
+            haskey(o, :big_unstab) ? @sprintf("%.2e", o[:big_unstab].C4) : "—", c[:Omega_dim], c[:Omega_overlap], u.dSigma, u.dK)
 end
 """)
 
@@ -628,10 +641,13 @@ savefig("v3b_K", K_heatmaps(R["V3b updn"][:checks][:box]; title = "decoupled tai
 md(r"""
 ## 7. Findings
 
-**F1 — C4 (bath leakage) fails for exact Wilson-chain data without the stabilization.** The particle chain of
-Algorithm 2 with $\Pi=1-vv^\dagger$ keeps running after the cyclic space of $Qq^\dagger$ is exhausted and enters the
-single-particle invariant subspace $\mathbb K_0\ominus d^\dagger$ ([VD] Lemma 12), where $r_n=\bar U_n^\dagger Dv$ is
-$O(1)$. The guaranteed tolerance $10^{-9}$ (V2a) is violated in every V2a chain case (table above). Evidence:
+**F1 — the unstabilized particle chain leaks into the single-particle subspace (C4 report, amendment A1).** The
+particle chain of Algorithm 2 with $\Pi=1-vv^\dagger$ keeps running after the cyclic space of $Qq^\dagger$ is
+exhausted and enters the single-particle invariant subspace $\mathbb K_0\ominus d^\dagger$ ([VD] Lemma 12), where
+$r_n=\bar U_n^\dagger Dv$ is $O(1)$; C4 of this chain is 0.2–1 in every exact chain case. Step 1 classified this as a
+failure of a guaranteed check; on review it is a mis-specification of the task sheet: for exact data with a bath C4 is
+guaranteed only for the stabilized chain of Prop. 13, which is now the default output of Stage 2 (amendments A1, A2).
+Evidence:
 
 * the leak $|r_n-\delta_{n1}\bar N|/\bar N$ starts at $\sim10^{-15}$ at $n=1$ and grows roughly exponentially along
   the chain (plot "bath leakage" in Sec. 3), crossing $10^{-9}$ after $\sim130$ levels for the 64-state chain and
@@ -647,7 +663,7 @@ $O(1)$. The guaranteed tolerance $10^{-9}$ (V2a) is violated in every V2a chain 
 
 Smallest reproducing case: `siam(U = 0.5, εd = -0.1, Δ = 0.1)`, chain sites $-1..0$ (16 states), $T=0.05$, ExactGrid,
 channel (↑↓): C4 = 1.03 (Float64 and BigFloat), stabilized $10^{-15}$ (row `V2 Nch=0` above). Per the stop rule no
-tolerance was loosened; the stabilized C4 is listed as a separate row. Interpretation: Lemma 12 holds in exact
+tolerance was loosened in Step 1; the classification was changed by the amendment. Interpretation: Lemma 12 holds in exact
 arithmetic **with exact data**; Float64 data are exact only to rounding, which the unprojected invariant subspace
 does not forgive. [VD] Sec. 9 anticipates this ("such errors can grow along the chain"); the result says the
 stabilization is not optional for exact data with a bath if C4 is to hold.
@@ -658,7 +674,8 @@ and first-block weights of $PDP$ on ${\rm ran}\,P$, and $\Sigma^{\rm S}$ to $\le
 Jacobi blocks agree with Stage 2 only up to `n_agree` (table in Sec. 3) and its chain terminates at a different
 length: the measures have weights spanning $\sim e^{-|E|/T}$, i.e. many decades, and the late Jacobi coefficients of
 such measures are ill-conditioned (they are fixed by poles whose weights are near the termination threshold). This
-affects no guaranteed check; the task sheet gives C2 no tolerance, so it is reported.
+affects no guaranteed check; under amendment A3 the C2 invariants are guaranteed ($10^{-10}$) and `n_agree` is
+reported.
 
 **F3 — $K^{(12)}\equiv0$ in the atom's (↑↑) channel.** $B=q_{\uparrow\uparrow}=Un_\downarrow$ commutes with $H$,
 $d_\uparrow$ and $q_\uparrow$, so all four correlators are independent of $\tau_1$ and their regular parts vanish at
@@ -671,7 +688,8 @@ nb = {"cells": cells,
       "metadata": {"kernelspec": {"display_name": "Julia 1.13", "language": "julia", "name": "julia-1.13"},
                    "language_info": {"file_extension": ".jl", "mimetype": "application/julia", "name": "julia", "version": "1.13.3"}},
       "nbformat": 4, "nbformat_minor": 5}
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vertex_krylov.ipynb")
+import sys
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "vertex_krylov.ipynb")
 with open(out, "w") as f:
     json.dump(nb, f, indent=1, ensure_ascii=False)
 print("wrote", out, len(cells), "cells")

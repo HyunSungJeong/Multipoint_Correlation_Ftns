@@ -7,10 +7,13 @@
 # memory (Nch = 2 on the ExactGrid; timings in vertex_krylov_STATUS.md). Run with
 #   julia -t 4 --project=mpNRG/test mpNRG/test/test_vertex_krylov_nrg.jl
 #
-# Guaranteed tolerances ([VD] Theorem 2) are asserted; "report" columns are
-# measured only (the notebook tabulates them). C4 for exact data is asserted for
-# the stabilized chain ([VD] Prop. 13); without stabilization it fails (finding
-# F1 of the notebook / vertex_krylov_STATUS.md) and is recorded with @test_broken.
+# Guaranteed tolerances ([VD] Theorem 2, task sheet amended as recorded in
+# vertex_krylov_STATUS.md) are asserted; "report" columns are measured only (the
+# notebook tabulates them). Amendment A1/A2: for exact data the Stage-2 default is
+# the stabilized particle chain ([VD] Prop. 13) and its C4 is guaranteed; C4 of the
+# unstabilized chain (Π = 1 - vv†) is report only. Amendment A3: the C2 invariants
+# (Σ^S, spectra, first-block weights, S = N̄²) are guaranteed at 1e-10, the
+# Jacobi-block agreement is report only.
 
 using Test, MultipointNRG, LinearAlgebra
 isdefined(@__MODULE__, :model_ed) || include(joinpath(@__DIR__, "helpers.jl"))
@@ -32,6 +35,7 @@ function vk_assert_common(c; C1, C56, C7, C8)
     @test c[:C7] ≤ C7
     @test c[:C8] ≤ C8
     @test c[:C8_parts].perm ≤ C8
+    @test c[:C2] ≤ 1e-10                           # A3: Zacinskis invariants
     @test c[:particle_terminated]
 end
 
@@ -54,17 +58,19 @@ end
         c = out[:checks]
         vk_assert_common(c; C1 = 1e-10, C56 = 1e-12, C7 = 1e-10, C8 = 1e-9)
         @test c[:C3] ≤ 1e-9
-        @test c[:C2] ≤ 1e-10                       # Σ^S, spectra and weights of Zacinskis' route
-        # C4: guaranteed by Lemma 12 for exact data in exact arithmetic
-        st = out[:stab]
-        @test st.C4 ≤ 1e-9                          # stabilized chain (Prop. 13)
-        @test st.Omega_overlap ≤ 1e-10
-        @test st.Omega_dim == Nch + 2                # single-particle levels of the chain (sites -1..Nch)
-        @test st.C1 ≤ 1e-10 && st.C8 ≤ 1e-9
-        @test st.dSigma ≤ 1e-10 && st.dK ≤ 1e-9      # outputs unchanged by the stabilization
-        @test_broken c[:C4] ≤ 1e-9                   # finding F1: unstabilized chain leaks (also in BigFloat)
+        # C4 of the default (stabilized, Prop. 13) chain: guaranteed (amendment A1)
+        @test c[:stabilized]
+        @test c[:C4] ≤ 1e-9
+        @test c[:Omega_overlap] ≤ 1e-10
+        @test c[:Omega_dim] == Nch + 2               # single-particle levels of the chain (sites -1..Nch)
+        # diagnostic: the unstabilized chain gives the same outputs (task sheet Sec. 5.3);
+        # its C4 is report only (finding F1: it leaks, also in BigFloat)
+        u = out[:unstab]
+        @test u.C1 ≤ 1e-10 && u.C8 ≤ 1e-9
+        @test u.dSigma ≤ 1e-10 && u.dK ≤ 1e-9
+        @info "V2a Nch=$Nch field=$field $chan: C4 unstabilized (report) = $(u.C4)"
         if Nch == 1
-            @test out[:big].C4 > 1e-9                # the leak is seeded by the data, not by Float64 rounding
+            @test out[:big].C4 ≤ 1e-9                # BigFloat, default chain
         end
     end
 

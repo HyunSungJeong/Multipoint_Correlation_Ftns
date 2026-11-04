@@ -175,7 +175,7 @@ regular part `K̃⁽¹²⁾` of Lihm's 3p estimator and compared with the estima
 | `vertex_krylov_task.md` | V0 | PSF convention, ζ signs, odd bin maps, (I3) map, `regular_sum` frequency convention vs [3p] Liouvillian form; data sanity (sum rules, 3p totals, PSD, hole symmetry) | ≤ 2e-15 |
 | `vertex_krylov_task.md` | V1 | atom `U = 1`, `εd = -0.3`, `T = 0.1, 0.5`: closed-form chain; C1–C8; `N = 2` block test (also rotated complex orbitals) | ≤ 4e-14 (C8 ≤ 1e-15) |
 | `vertex_krylov_task.md` | V2a | Wilson-chain ED, ExactGrid, 64/256 states, with/without field: C1, C3, C5–C8 | ≤ 3e-13 |
-| `vertex_krylov_task.md` | V2a | C4 bath leakage, Algorithm 2 as specified / stabilized ([VD] Prop. 13) | 0.20–0.85 (**fails**, also in BigFloat; finding F1) / ≤ 1.3e-14 |
+| `vertex_krylov_task.md` | V2a | C4 bath leakage of the default (stabilized, [VD] Prop. 13) chain / of the unstabilized diagnostic chain (report, amendment A1, finding F1) | ≤ 1.3e-14 / 0.20–0.85 |
 | `vertex_krylov_task.md` | V2b | same ED binned on the LogGrid: C1, C5–C8 (C3, C4 report) | ≤ 2e-13 |
 | `vertex_krylov_task.md` | V3a | untruncated NRG vs binned ED: data; C1, C5–C8 | ≤ 1e-14; ≤ 2e-13 |
 | `vertex_krylov_task.md` | V3b | decoupled tail, truncated NRG (`N_keep = 40`) vs ED: data; C1, C5–C8 | ≤ 4e-15; ≤ 4e-14 |

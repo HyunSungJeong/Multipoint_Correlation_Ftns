@@ -884,10 +884,14 @@ function single_particle_basis(cs; tol::Real = 1e-12)
         nrm = _vk_opnorm(Y)
         push!(norms, Float64(nrm))
         nrm ≤ thr && break
-        F = svd(Matrix(Y))
-        keep = findall(>(thr), F.S)
-        isempty(keep) && break
-        blk = F.U[:, keep]
+        if size(Y, 2) == 1                      # single column: no SVD needed (works in BigFloat)
+            blk = Y / norm(Y)
+        else
+            F = svd(Matrix(Y))
+            keep = findall(>(thr), F.S)
+            isempty(keep) && break
+            blk = F.U[:, keep]
+        end
         Ω = hcat(Ω, blk)
     end
     return (Ω = Ω, dim = size(Ω, 2), diag = Dict(:block_norms => norms, :threshold => Float64(thr)))
@@ -1445,14 +1449,22 @@ struct VKResult
 end
 
 """
-    vertex_krylov(data; ranktol = 1e-13, tol = 1e-12, rtol = 1e-12, stabilize = false) -> VKResult
+    vertex_krylov(data; ranktol = 1e-13, tol = 1e-12, rtol = 1e-12, stabilize = :auto) -> VKResult
 
 Algorithm 2 of [VD], Stages 1-4 (Stage 5 is evaluated per frequency by
 [`sigmas`](@ref) and [`Ktilde`](@ref)).
+
+Stage 2 (task sheet amendment A2): for exact data (`data.meta[:grid_kind] ===
+:exact`) the default particle chain is the stabilized one of [VD] Prop. 13
+(`Π = 1 - ΩΩ†`); without a bath `Ω = v` and it coincides with Algorithm 1 as
+written. For binned data Prop. 13 does not apply and `Π = 1 - vv†`.
+`stabilize = true/false` forces either chain (the unstabilized chain of exact
+data is kept as a diagnostic by the callers).
 """
 function vertex_krylov(d::DiscreteData; ranktol::Real = 1e-13, tol::Real = 1e-12, rtol::Real = 1e-12,
-                       stabilize::Bool = false)
-    ch = chains(d; ranktol = ranktol, tol = tol, stabilize = stabilize)
+                       stabilize = :auto)
+    stab = stabilize === :auto ? (get(d.meta, :grid_kind, :binned) === :exact) : Bool(stabilize)
+    ch = chains(d; ranktol = ranktol, tol = tol, stabilize = stab)
     C, kd = kernels(d, ch; rtol = rtol)
     cp = couplings(d, ch, C)
     return VKResult(d, ch, C, kd, cp)
@@ -1764,6 +1776,8 @@ function vk_checks(res::VKResult; box::Bool = true, zac::Bool = true, G0 = nothi
     out[:R] = ch.cs.diag[:R]; out[:nbins] = length(d.b)
     out[:particle_resid] = ch.diag[:particle][:resid]
     out[:particle_terminated] = ch.diag[:particle][:terminated]
+    out[:stabilized] = ch.diag[:stabilized]
+    haskey(ch.diag, :Omega_dim) && (out[:Omega_dim] = ch.diag[:Omega_dim]; out[:Omega_overlap] = ch.diag[:Omega_overlap])
     return out
 end
 
