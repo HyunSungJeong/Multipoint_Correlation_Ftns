@@ -1,6 +1,8 @@
-"""Assemble notebooks/vertex_krylov.ipynb (Step 1 of the vertex_krylov task: V0, V1, V2, V3a, V3b).
+"""Assemble notebooks/vertex_krylov.ipynb (the vertex_krylov task, Steps 1 and 2: V0-V3c).
 
-Run:  python3 notebooks/build_vertex_krylov_notebook.py
+Run:  python3 notebooks/build_vertex_krylov_notebook.py [output path]
+(V3c data are cached by mpNRG/scripts/vertex_krylov_v3c.jl in notebooks/data/vertex_krylov_v3c/; the notebook
+builds missing cases itself.)
 then execute it with the Julia 1.13 kernel (4 threads; the first cell activates mpNRG/notebooks):
   jupyter nbconvert --to notebook --execute --inplace \
       --ExecutePreprocessor.timeout=-1 notebooks/vertex_krylov.ipynb
@@ -14,10 +16,10 @@ def md(s): cells.append({"cell_type": "markdown", "id": "cell-%03d" % len(cells)
 def code(s): cells.append({"cell_type": "code", "id": "cell-%03d" % len(cells), "metadata": {}, "execution_count": None, "outputs": [], "source": s.strip("\n")})
 
 md(r"""
-# Discrete Krylov representation of the 3p vertex (`vertex_krylov`), Step 1
+# Discrete Krylov representation of the 3p vertex (`vertex_krylov`)
 
-This notebook is the complete record of results of Step 1 (phases V0, V1, V2, V3a, V3b) of the `vertex_krylov`
-task. It implements and tests Algorithm 2 of the project note **[VD]** *Jacobi matrices and couplings of the 3p
+This notebook is the complete record of results of the `vertex_krylov` task: Step 1 (phases V0, V1, V2, V3a, V3b)
+and Step 2 (V3c). It implements and tests Algorithm 2 of the project note **[VD]** *Jacobi matrices and couplings of the 3p
 vertex from discrete spectral data*, which takes discrete 2p and 3p PSF weights on one symmetric grid and returns the
 Jacobi matrices $\bar{\mathbb J}$, $\bar N$ ($\bar{\mathbb J}_d=-\bar{\mathbb J}^T$), $\mathbb J_B, N_B$,
 $\mathbb J_{B^\dagger}, N_{B^\dagger}$, the couplings (VD27) and the self-energy coefficients $\Sigma^{\rm L}$,
@@ -31,8 +33,9 @@ symmetric about zero.
 | short Wilson chain (V2a/V2b) | mpNRG ED of the chain, ExactGrid / LogGrid | exact | 3 |
 | same chain, untruncated NRG (V3a) | mpNRG NRG, LogGrid | exact | 4 |
 | decoupled tail, truncated NRG (V3b) | mpNRG NRG, LogGrid | exact | 5 |
+| physical chain, truncated NRG (V3c) | mpNRG NRG, LogGrid | **not** exact; measured (report only) | 6 |
 
-The physical truncated chain (V3c) is Step 2 and not part of this notebook.
+Criteria: the task sheet as amended after the Step-1 review (amendments A1–A3 in `vertex_krylov_STATUS.md`).
 
 **Code.** `src/vertex_krylov.jl` (package `HubbardAtom`, imported as `HA`; depends on `LinearAlgebra` only) and
 `mpNRG/test/vertex_krylov_adapter.jl` (data from mpNRG, case runners). The tests
@@ -140,6 +143,21 @@ for chan in (:updn, :upup)
     R["V3b $chan"] = vk_case_nrg(3, chan; Nkeep = 40, chains = chs)
     @printf("V3b %-5s: %6.1f s\n", chan, time() - t0)
 end
+
+# --- V3c: physical chain, truncated NRG (report only) ---------------------------------------
+# NRG data are built by mpNRG/scripts/vertex_krylov_v3c.jl (vk_v3c_data) and cached in
+# notebooks/data/vertex_krylov_v3c/; missing cases are built here. Algorithm and checks run here.
+using JLD2
+include(joinpath(ROOT, "mpNRG", "scripts", "vertex_krylov_v3c.jl"))   # V3C_TS, V3C_NKEEPS, v3c_file, v3c_build_all
+v3c_build_all()
+for T in V3C_TS, Nk in V3C_NKEEPS, chan in (:updn, :upup)
+    t0 = time()
+    d = load(v3c_file(T, Nk, chan), "data")
+    o = vk_case_v3c(d)
+    o[:data] = d
+    R["V3c T=$T Nk=$Nk $chan"] = o
+    @printf("V3c T=%.0e Nkeep=%3d %-5s: %6.1f s (cached NRG data: %.0f s)\n", T, Nk, chan, time() - t0, d.meta[:time_nrg] + d.meta[:time_data])
+end
 if SMOKE
     for k in collect(keys(R))
         occursin("Nch=1", k) && (R[replace(k, "Nch=1" => "Nch=2")] = R[k])
@@ -152,7 +170,7 @@ println("SMOKE = ", SMOKE)
 md(r"""
 ## 0. Summary
 
-The full Step-1 test matrix (task sheet Sec. 6): phase × case × channel × check, with the achieved value, the
+The full test matrix of Steps 1 and 2 (task sheet Sec. 6): phase × case × channel × check, with the achieved value, the
 tolerance, and pass / FAIL / report. **Guaranteed** tolerances follow from [VD] Theorem 2 (stop rule); "report" means
 measured only. Generated from `R` by the same check functions as the tests.
 
@@ -228,6 +246,12 @@ for chan in (:updn, :upup)
     o = R["V3b $chan"]
     rows_for!("V3b", "decoupled tail Nkeep=40", chs(chan), o)
     row!("V3b", "decoupled tail Nkeep=40", chs(chan), "data vs ED max|ΔW̃|,|Δs|", max(o[:diff].W, o[:diff].wB, o[:diff].s), nothing)
+end
+for T in V3C_TS, Nk in V3C_NKEEPS, chan in (:updn, :upup)
+    o = R["V3c T=$T Nk=$Nk $chan"]; case = @sprintf("T=%.0e Nkeep=%d", T, Nk)
+    rows_for!("V3c", case, chs(chan), o)
+    ref = R["V3c T=$T Nk=512 $chan"][:checks][:box]; bx = o[:checks][:box]; m_ = .!isnan.(real.(bx.Kt))
+    row!("V3c", case, chs(chan), "K̃ vs Nkeep=512 (rel.)", maximum(abs, bx.Kt[m_] - ref.Kt[m_]) / maximum(abs, ref.Kt[m_]), nothing)
 end
 @printf("%-5s %-26s %-7s %-30s %11s %9s  %s\n", "phase", "case", "channel", "check", "value", "tol", "status")
 for r in ROWS
@@ -639,49 +663,207 @@ savefig("v3b_K", K_heatmaps(R["V3b updn"][:checks][:box]; title = "decoupled tai
 
 # ------------------------------------------------------------------------------------------
 md(r"""
+## 6. Physical chain, truncated NRG (V3c)
+
+`siam(U = 0.5, εd = -0.1, Δ = 0.1)` on the physical Wilson chain, $\Lambda=4$, $z=1$, length
+`chain_length_for(T; Λ = 4)` (as the mpNRG validation runs), $N_{\rm keep}\in\{64,128,256,512\}$,
+$T\in\{10^{-2},10^{-4}\}$, both channels, on `LogGrid(emin = 1e-9, emax = 10, ndec = 16)` (deviation from the default
+`emin = 1e-5`, which clamps millions of contributions at $T=10^{-4}$; see `vertex_krylov_STATUS.md`). Truncated NRG data
+are **not** exact data of a single generator, so nothing is guaranteed: every check is reported. The central question
+is how much the inconsistency of the NRG data, measured by the factorization residual C7, costs in the vertex, measured
+by C8 against the direct estimator from the same PSFs. C1 is algebraic (it holds for any Hermitian data); C3 uses the
+$U=0$ propagator of the same chain from its single-particle Hamiltonian (`vk_G0_chain`); C4 has no guarantee for
+binned NRG data (Prop. 13 does not apply). Convergence in $N_{\rm keep}$ is measured against $N_{\rm keep}=512$.
+
+Truncated NRG weights violate two preconditions of Stage 1 that exact and binned ED data satisfy to rounding: the
+$2N\times2N$ Pelz weights $\widetilde{\mathbf W}_\beta$ are not Hermitian bin by bin (their sum is), and their Hermitian
+part is not positive semidefinite. Stage 1 factors the Hermitian part and drops its negative eigenvalues (both
+reported below), so the factored measure has $v^\dagger v\neq1$. Where the specified assertion
+$\|v^\dagger v-1\|\le10^{-12}$ fails, Stage 1 runs with the opt-in variant `gram = :general`
+($P=1-v(v^\dagger v)^{-1}v^\dagger$, $\sigma=(v^\dagger v)^{-1}v^\dagger w$; identical to the specification for
+$v^\dagger v=1$; deviation in `vertex_krylov_STATUS.md`). All checks compare with the raw data, so C1 and C8 include
+the cost of what Stage 1 drops.
+""")
+
+code(r"""
+V3CK = [(T, Nk, c) for T in V3C_TS for Nk in V3C_NKEEPS for c in (:updn, :upup)]
+v3(T, Nk, c) = R["V3c T=$T Nk=$Nk $c"]
+@printf("%-8s %6s %-5s %3s %5s %5s %5s %5s %4s %9s %9s %9s %9s %9s %9s %9s %9s %8s %7s\n", "T", "Nkeep", "chan", "N", "kept",
+        "bins", "R", "L", "L_B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "clamped", "t_NRG")
+for (T, Nk, c) in V3CK
+    o = v3(T, Nk, c); ck = o[:checks]; d = o[:data]
+    @printf("%-8.0e %6d %-5s %3d %5d %5d %5d %5d %4d %9.1e %9.1e %9.1e %9.1e %9.1e %9.1e %9.1e %9.1e %8d %7.0f\n", T, Nk, c,
+            d.meta[:N], maximum(d.meta[:truncation].kept), count(β -> !iszero(d.W[β]), eachindex(d.b)), ck[:R], ck[:L], ck[:LB],
+            ck[:C1], ck[:C2], ck[:C3], ck[:C4], ck[:C5], ck[:C6], ck[:C7], ck[:C8], d.meta[:nclamped], d.meta[:time_nrg] + d.meta[:time_data])
+end
+println("\nsanity (sum rules vs thermal_average_product, 3p totals, PSD), max over V3c:")
+S = [v3(k...)[:checks][:sanity] for k in V3CK]
+@printf("  herm %.1e, min eig/max‖W‖ %.1e, sum rule %.1e, 3p totals %.1e, C5 %.1e, Boltzmann-shortcut diff %.1e\n",
+        maximum(s.herm_err for s in S), minimum(s.min_eig_rel for s in S), maximum(s.sumrule_err for s in S),
+        maximum(s.totals3_err for s in S), maximum(s.C5 for s in S), maximum(s.boltzmann_diff for s in S))
+println("C7 per family (max over V3c): ", Dict(f => @sprintf("%.1e", maximum(v3(k...)[:checks][:C7_family][f] for k in V3CK)) for f in 1:6))
+""")
+
+code(r"""
+# properties of the truncated NRG data that Stage 1 meets (report): W̃_β bin by bin is not Hermitian (Stage 1
+# factors the Hermitian part) and its Hermitian part is not PSD (Stage 1 drops the negative eigenvalues), so the
+# factored measure has v†v ≠ 1; where ‖v†v - 1‖ > 1e-12 Stage 1 runs with gram = :general (deviation, see STATUS);
+# negative bosonic weights are clamped to 0
+@printf("%-8s %6s %-5s %12s %12s %10s %8s %11s %8s %15s\n", "T", "Nkeep", "chan", "antiherm/‖W‖", "neg. mass", "worst neg",
+        "#bins<0", "‖v†v - 1‖", "general", "w^B<0: n, min")
+for (T, Nk, c) in V3CK
+    p = v3(T, Nk, c)[:psd]
+    @printf("%-8.0e %6d %-5s %12.1e %12.1e %10.1e %8d %11.1e %8s %15s\n", T, Nk, c, p.antiherm_rel, p.neg_mass, p.worst_rel,
+            p.nbins_neg, p.norm_err, p.gram_general, @sprintf("%d, %.1e", p.wB_neg...))
+end
+""")
+
+code(r"""
+# C7 (data inconsistency) and C8 (cost in the vertex) against Nkeep and T
+fig = Figure(size = (1300, 420))
+for (j, (key, ttl)) in enumerate(((:C7, "C7 factorization residual"), (:C8, "C8 |K̃ - K^direct| / max|K^direct|"),
+                                  (:C1, "C1 (algebraic)")))
+    ax = Axis(fig[1, j]; xscale = log2, yscale = log10, xlabel = "N_keep", title = ttl, xticks = collect(V3C_NKEEPS))
+    for T in V3C_TS, c in (:updn, :upup)
+        scatterlines!(ax, collect(V3C_NKEEPS), [fl(v3(T, Nk, c)[:checks][key]) for Nk in V3C_NKEEPS];
+                      label = @sprintf("T=%.0e %s", T, chs(c)), linestyle = c === :updn ? :solid : :dash)
+    end
+    j == 1 && axislegend(ax; position = :lb)
+end
+savefig("v3c_C7_C8", fig)
+""")
+
+code(r"""
+# convergence of K̃ and of K^direct in Nkeep (relative to Nkeep = 512, over the Matsubara box)
+println("max|K(Nkeep) - K(512)| / max|K(512)|:")
+@printf("%-8s %-5s %s\n", "T", "chan", join([@sprintf("%15s", "Nkeep=$Nk (K̃, K^dir)") for Nk in V3C_NKEEPS[1:end-1]], " "))
+for T in V3C_TS, c in (:updn, :upup)
+    ref = v3(T, 512, c)[:checks][:box]; m_ = .!isnan.(real.(ref.Kt))
+    vals = map(V3C_NKEEPS[1:end-1]) do Nk
+        bx = v3(T, Nk, c)[:checks][:box]
+        @sprintf("%7.1e, %7.1e", maximum(abs, bx.Kt[m_] - ref.Kt[m_]) / maximum(abs, ref.Kt[m_]),
+                 maximum(abs, bx.Kd[m_] - ref.Kd[m_]) / maximum(abs, ref.Kd[m_]))
+    end
+    @printf("%-8.0e %-5s %s\n", T, c, join([@sprintf("%15s", v) for v in vals], " "))
+end
+""")
+
+code(r"""
+# particle-chain lengths and residuals, Float64 vs BigFloat (precision 128)
+@printf("%-8s %6s %-5s %5s %5s %11s %11s %9s %9s %9s %8s\n", "T", "Nkeep", "chan", "L", "L_big", "resid f64", "resid big",
+        "orth f64", "orth big", "C1 big", "n_agree")
+for (T, Nk, c) in V3CK
+    o = v3(T, Nk, c); ck = o[:checks]; b = o[:big]
+    pd = o[:res] === nothing ? nothing : o[:res].ch.diag[:particle]
+    @printf("%-8.0e %6d %-5s %5d %5d %11.1e %11.1e %9.1e %9.1e %9.1e %8d\n", T, Nk, c, ck[:L], b.L, ck[:particle_resid],
+            Float64(b.resid), pd === nothing ? NaN : pd[:orth_loss], b.orth, b.C1, b.n_agree)
+end
+""")
+
+code(r"""
+# K̃ slices (n4 = n3) for all Nkeep, with K^direct (markers), channel (↑↓)
+fig = Figure(size = (1300, 800))
+for (i, T) in enumerate(V3C_TS), (j, part) in enumerate((real, imag))
+    ax = Axis(fig[i, j]; xlabel = "n₃ (= n₄)", title = @sprintf("T=%.0e (↑↓): %s K⁽¹²⁾", T, part === real ? "Re" : "Im"))
+    for Nk in V3C_NKEEPS
+        bx = v3(T, Nk, :updn)[:checks][:box]
+        lines!(ax, bx.n3s, [part(bx.Kt[k, k]) for k in eachindex(bx.n3s)]; label = "K̃, Nkeep=$Nk")
+        scatter!(ax, bx.n3s, [part(bx.Kd[k, k]) for k in eachindex(bx.n3s)]; markersize = 5)
+    end
+    i == 1 && j == 2 && Legend(fig[1:2, 3], ax; framevisible = false)
+end
+savefig("v3c_K_slices", fig)
+""")
+
+code(r"""
+savefig("v3c_K", K_heatmaps(v3(1e-4, 512, :updn)[:checks][:box]; title = "V3c T=1e-4 Nkeep=512 (↑↓)"))
+""")
+
+code(r"""
+# Zacinskis cross-check on V3c data (C2 invariants; Jacobi blocks: n_agree)
+@printf("%-26s %9s %9s %9s %9s %9s %7s %7s %7s\n", "case", "S-N̄²", "Ū₁", "spectra", "weights", "Σ^S", "L_zac", "L", "n_agree")
+for (T, Nk, c) in V3CK
+    z = v3(T, Nk, c)[:checks][:zac]
+    @printf("%-26s %9.1e %9.1e %9.1e %9.1e %9.1e %7d %7d %7d\n", @sprintf("T=%.0e Nk=%d %s", T, Nk, c), z.S_err, z.U1_err,
+            z.spec_err, z.weight_err, z.sigma_err, z.L_zac, z.L_chain, z.n_agree)
+end
+""")
+
+# ------------------------------------------------------------------------------------------
+md(r"""
 ## 7. Findings
+
+The numbers behind each finding are computed in the cell below the text.
 
 **F1 — the unstabilized particle chain leaks into the single-particle subspace (C4 report, amendment A1).** The
 particle chain of Algorithm 2 with $\Pi=1-vv^\dagger$ keeps running after the cyclic space of $Qq^\dagger$ is
 exhausted and enters the single-particle invariant subspace $\mathbb K_0\ominus d^\dagger$ ([VD] Lemma 12), where
-$r_n=\bar U_n^\dagger Dv$ is $O(1)$; C4 of this chain is 0.2–1 in every exact chain case. Step 1 classified this as a
-failure of a guaranteed check; on review it is a mis-specification of the task sheet: for exact data with a bath C4 is
-guaranteed only for the stabilized chain of Prop. 13, which is now the default output of Stage 2 (amendments A1, A2).
-Evidence:
+$r_n=\bar U_n^\dagger Dv$ is $O(1)$. Step 1 classified this as the failure of a guaranteed check; on review it is a
+mis-specification of the task sheet: for exact data with a bath C4 is guaranteed only for the stabilized chain of
+Prop. 13, which is now the default output of Stage 2 (amendments A1, A2). Evidence (cell below and Sec. 3):
 
-* the leak $|r_n-\delta_{n1}\bar N|/\bar N$ starts at $\sim10^{-15}$ at $n=1$ and grows roughly exponentially along
-  the chain (plot "bath leakage" in Sec. 3), crossing $10^{-9}$ after $\sim130$ levels for the 64-state chain and
-  reaching $O(1)$ in the last levels; the unstabilized chain is longer than the stabilized one by
-  $\dim\Omega-1$ = number of bath levels (16-state chain: $L=15=\dim{\rm ran}\,P$ vs 14);
-* **BigFloat (128 bit) gives the same leak** (same chain length, same C4 to two digits), so the seed is not Float64
-  rounding in the Lanczos recursion but the $\sim10^{-16}$ accuracy with which the Float64 ED data satisfy the equation
-  of motion; the Lanczos recursion amplifies this component until the residual exceeds the termination threshold
-  `tol·max|D| = 1e-12·max|D|`, and the chain continues into the invariant subspace;
-* with the stabilization of [VD] Prop. 13 ($\Pi=1-\Omega\Omega^\dagger$, $\dim\Omega=N_{\rm ch}+2$ = number of chain
-  levels) C4 is $\sim10^{-14}$ and all outputs ($\Sigma^{\rm S}$, $\tilde K$) are unchanged to $\lesssim10^{-12}$;
-* C1, C3, C8 pass with and without stabilization: the spurious levels carry no weight in $\Sigma^{\rm S}$ or $\tilde K$.
+* the leak $|r_n-\delta_{n1}\bar N|/\bar N$ starts at rounding level at $n=1$ and grows roughly exponentially along the
+  chain ("bath leakage" plot); the unstabilized chain is longer than the stabilized one by $\dim\Omega-1$, the number
+  of bath levels;
+* BigFloat (128 bit) gives the same leak, so the seed is not rounding in the Lanczos recursion but the accuracy with
+  which the Float64 ED data satisfy the equation of motion; the recursion amplifies this component until the residual
+  exceeds the termination threshold `tol·max|D|` and the chain continues into the invariant subspace;
+* with the stabilization ($\Pi=1-\Omega\Omega^\dagger$, $\dim\Omega$ = number of chain levels) C4 is at rounding
+  level, and $\Sigma^{\rm S}$, $\tilde K$ are unchanged; C1 and C8 of the unstabilized chain also hold: the spurious
+  levels carry no weight in $\Sigma^{\rm S}$ or $\tilde K$.
 
 Smallest reproducing case: `siam(U = 0.5, εd = -0.1, Δ = 0.1)`, chain sites $-1..0$ (16 states), $T=0.05$, ExactGrid,
-channel (↑↓): C4 = 1.03 (Float64 and BigFloat), stabilized $10^{-15}$ (row `V2 Nch=0` above). Per the stop rule no
-tolerance was loosened in Step 1; the classification was changed by the amendment. Interpretation: Lemma 12 holds in exact
-arithmetic **with exact data**; Float64 data are exact only to rounding, which the unprojected invariant subspace
-does not forgive. [VD] Sec. 9 anticipates this ("such errors can grow along the chain"); the result says the
-stabilization is not optional for exact data with a bath if C4 is to hold.
+channel (↑↓) (`V2 Nch=0`). Lemma 12 holds in exact arithmetic **with exact data**; Float64 data are exact only to
+rounding, which the unprojected invariant subspace does not forgive ([VD] Sec. 9: "such errors can grow along the
+chain").
 
 **F2 — C2: the Jacobi blocks of two Lanczos runs agree only on the leading blocks.** The Zacinskis route
 ($\Omega'$ diagonalized, Lanczos from the image of $\bar U_1$) reproduces $S=\bar N^2$, the start block, the spectrum
-and first-block weights of $PDP$ on ${\rm ran}\,P$, and $\Sigma^{\rm S}$ to $\lesssim10^{-13}$ in every case. Its
-Jacobi blocks agree with Stage 2 only up to `n_agree` (table in Sec. 3) and its chain terminates at a different
-length: the measures have weights spanning $\sim e^{-|E|/T}$, i.e. many decades, and the late Jacobi coefficients of
-such measures are ill-conditioned (they are fixed by poles whose weights are near the termination threshold). This
-affects no guaranteed check; under amendment A3 the C2 invariants are guaranteed ($10^{-10}$) and `n_agree` is
-reported.
+and first-block weights of $PDP$ on ${\rm ran}\,P$, and $\Sigma^{\rm S}$ (C2 invariants, guaranteed under A3). Its
+Jacobi blocks agree with Stage 2 only up to `n_agree` and its chain may terminate at a different length: the measures
+have weights spanning $\sim e^{-|E|/T}$, many decades, and the late Jacobi coefficients of such measures are
+ill-conditioned (they are fixed by poles whose weights are near the termination threshold). Reported (A3).
 
 **F3 — $K^{(12)}\equiv0$ in the atom's (↑↑) channel.** $B=q_{\uparrow\uparrow}=Un_\downarrow$ commutes with $H$,
 $d_\uparrow$ and $q_\uparrow$, so all four correlators are independent of $\tau_1$ and their regular parts vanish at
-$\omega_{12}\neq0$; the six permutation terms are $O(1)$ and cancel to $10^{-16}$ in both $\tilde K$ and $K^{\rm direct}$
-(also with operator-level `regular_sum`). C8 as a ratio is then 0/0 and is measured on the scale of the
-permutation terms (deviation 4 in `vertex_krylov_STATUS.md`); the per-permutation agreement holds as everywhere.
+$\omega_{12}\neq0$; the six permutation terms are $O(1)$ and cancel in both $\tilde K$ and $K^{\rm direct}$ (also
+with operator-level `regular_sum`, `test/test_vertex_krylov.jl`). C8 as a ratio is then 0/0 and is measured on the
+scale of the permutation terms (deviation 4 in `vertex_krylov_STATUS.md`); the per-permutation agreement holds as
+everywhere.
+
+**F4 — V3c (physical chain, truncated NRG): see the text after the evidence cell.**
+""")
+
+code(r"""
+println("F1 — unstabilized (diagnostic) vs default (stabilized) particle chain, exact chain data")
+@printf("%-28s %9s %11s %10s %6s %6s %4s %9s %9s %10s\n", "case", "C4 unst", "C4 big-uns", "C4 default", "L uns", "L def",
+        "dimΩ", "C1 uns", "C8 uns", "n(>1e-9)")
+for k in vcat(["V2 Nch=0 B=0.0 updn exact"], ["V2 Nch=$N B=$f $c exact" for N in (1, 2) for f in (0.0, 0.05) for c in (:updn, :upup)],
+              ["V2 block N=2"])
+    o = R[k]; u = o[:unstab]; ck = o[:checks]
+    nfirst = findfirst(>(1e-9), u.profile)
+    @printf("%-28s %9.2e %11s %10.1e %6d %6d %4d %9.1e %9.1e %10s\n", k, u.C4,
+            haskey(o, :big_unstab) ? @sprintf("%.2e", o[:big_unstab].C4) : "—", ck[:C4], u.L, ck[:L], ck[:Omega_dim],
+            u.C1, u.C8, nfirst === nothing ? "—" : string(nfirst))
+end
+zs = [R[k][:checks][:zac] for k in keys(R) if haskey(R[k], :checks) && haskey(R[k][:checks], :zac) && !startswith(k, "V3c")]
+@printf("\nF2 — Steps 1 cases: C2 invariants max %.1e; n_agree / L from %.2f to %.2f (n_agree %d–%d)\n",
+        maximum(R[k][:checks][:C2] for k in keys(R) if haskey(R[k], :checks) && !startswith(k, "V3c")),
+        minimum(z.n_agree / z.L_chain for z in zs), maximum(z.n_agree / z.L_chain for z in zs),
+        minimum(z.n_agree for z in zs), maximum(z.n_agree for z in zs))
+for T in (0.1, 0.5)
+    p = R["V1 atom T=$T upup"][:checks][:C8_parts]
+    @printf("F3 — atom T=%.1f (↑↑): max|K^direct| = %.1e, max|K̃| = %.1e, max_p|K_p| = %.2e\n", T, p.maxKd,
+            maximum(abs, filter(!isnan, R["V1 atom T=$T upup"][:checks][:box].Kt)), p.maxKp)
+end
+println("\nF4 — V3c ranges per T (both channels, all Nkeep):")
+for T in V3C_TS
+    ks = [(T, Nk, c) for Nk in V3C_NKEEPS for c in (:updn, :upup)]
+    rng(f) = (minimum(f(v3(k...)) for k in ks), maximum(f(v3(k...)) for k in ks))
+    @printf("  T=%.0e: C1 %.1e–%.1e, C2 %.1e–%.1e, C7 %.1e–%.1e, C8 %.1e–%.1e, C3 %.1e–%.1e, C4 %.1e–%.1e, C5 %.1e–%.1e, C6 %.1e–%.1e\n", T,
+            rng(o -> o[:checks][:C1])..., rng(o -> o[:checks][:C2])..., rng(o -> o[:checks][:C7])..., rng(o -> o[:checks][:C8])...,
+            rng(o -> o[:checks][:C3])..., rng(o -> o[:checks][:C4])..., rng(o -> o[:checks][:C5])..., rng(o -> o[:checks][:C6])...)
+end
 """)
 
 nb = {"cells": cells,

@@ -11,3 +11,6 @@ notebooks/figures/heatmaps/p2_kf_vertex_full.jld2
 mpNRG/refs/
 # mpNRG: intermediate per-PSF results of scripts/v8_benchmark.jl (collected into v8_results.jld2)
 mpNRG/notebooks/figures/mpnrg/v8_parts/
+
+# vertex_krylov V3c: cached NRG data (1.9 GB; rebuilt by mpNRG/scripts/vertex_krylov_v3c.jl or by the notebook, ~2 h)
+notebooks/data/vertex_krylov_v3c/

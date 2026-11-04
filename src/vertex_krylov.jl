@@ -603,11 +603,20 @@ are those of `W̃_β` itself). `c_β = √w^B_β`, `c′_β = √w^{B†}_β` (n
 rounding clamped to 0 and reported). `v = (B_β E_d)_β`, `w = (B_β E_q)_β`,
 `σ = v†w`, `u = w - vσ`, `N̄ = (u†u)^{1/2}` (principal root); `‖v†v - 1‖ ≤ normtol`
 is asserted. `D[k]` is the energy of coordinate row `k`, `rows[β]` the rows of bin `β`.
+The factorization uses the Hermitian part of `W̃_β`; the dropped anti-Hermitian part
+is reported (`diag[:antiherm_max]`, `:antiherm_rel`, `:antiherm_sum`).
 
 Generic in the real type `T` (e.g. `BigFloat`); for `N = 1` all eigenproblems
 are 2×2 and solved in closed form. Real data are processed in real arithmetic.
+
+`gram = :general` (opt-in, used for the V3c truncated-NRG data only): when
+`‖v†v - 1‖ > normtol` — which happens when weights `W̃_β` have negative eigenvalues
+that the factorization drops — Stage 1 continues with `σ = (v†v)^{-1}v†w`,
+`u = w - vσ`, and the projector `1 - v(v†v)^{-1}v†` (orthonormal basis `vorth`),
+instead of throwing; `diag[:gram_general]` records it.
 """
-function coords(d::DiscreteData; ranktol::Real = 1e-13, T::Type = Float64, normtol::Real = 1e-12)
+function coords(d::DiscreteData; ranktol::Real = 1e-13, T::Type = Float64, normtol::Real = 1e-12,
+                gram::Symbol = :assert)
     N = d.N; n2 = 2N; nb = length(d.b)
     isreal_data = all(W -> all(x -> iszero(imag(x)), W), d.W)
     E = isreal_data ? T : Complex{T}
@@ -615,7 +624,13 @@ function coords(d::DiscreteData; ranktol::Real = 1e-13, T::Type = Float64, normt
     rows = Vector{UnitRange{Int}}(undef, nb)
     R = 0
     dropped = zero(T); dropped_neg = zero(T); ndropped = 0; maxrelneg = zero(T)
+    # the factorization uses the Hermitian part of W̃_β; its anti-Hermitian part is
+    # dropped and reported (rounding level for ED data, not for truncated NRG data)
+    antiherm = 0.0; antiherm_sum = 0.0
+    Wscale = maximum(W -> _vk_opnorm(W), d.W; init = 0.0)
     for β in 1:nb
+        ahβ = _vk_maxabs(d.W[β] - d.W[β]') / 2
+        antiherm = max(antiherm, ahβ); antiherm_sum += ahβ
         Wβ = isreal_data ? Matrix{E}(real.(d.W[β])) : Matrix{E}(d.W[β])
         if all(iszero, Wβ)
             Bf[β] = zeros(E, 0, n2); rows[β] = (R + 1):R
@@ -640,11 +655,20 @@ function coords(d::DiscreteData; ranktol::Real = 1e-13, T::Type = Float64, normt
     w = reduce(vcat, [Bf[β][:, (N + 1):n2] for β in 1:nb]; init = zeros(E, 0, N))
     vv = v' * v
     normerr = Float64(_vk_maxabs(vv - I))
-    normerr ≤ normtol || throw(ErrorException("Stage 1: ‖v†v - 1‖ = $normerr > $normtol " *
-                                              "(sum rule of the d block violated)"))
-    σ = v' * w
+    general = false
+    if normerr > normtol
+        gram === :general || throw(ErrorException("Stage 1: ‖v†v - 1‖ = $normerr > $normtol " *
+                                                  "(sum rule of the d block violated)"))
+        general = true
+    end
+    # gram = :general (opt-in, reported in diag[:gram_general]): for data whose factored
+    # measure has v†v ≠ 1 (non-PSD weights of truncated NRG, whose negative eigenvalues the
+    # factorization drops), P = 1 - v(v†v)^{-1}v† and σ = (v†v)^{-1}v†w; identical to the
+    # specified formulas when v†v = 1
+    σ = general ? vv \ (v' * w) : v' * w
     u = w - v * σ
     Nbar = _vk_hsqrt(u' * u)
+    vorth = general ? v * inv(_vk_hsqrt(vv)) : v
     # bosonic factors
     function bfac(wv)
         im_max = maximum(x -> abs(imag(x)), wv; init = 0.0)
@@ -660,8 +684,11 @@ function coords(d::DiscreteData; ranktol::Real = 1e-13, T::Type = Float64, normt
                             :rank_dropped_negative => Float64(dropped_neg), :rank_ndropped => ndropped,
                             :rank_max_rel_negative => Float64(maxrelneg), :norm_err => normerr,
                             :ranks => [length(r) for r in rows], :c_clamp => cdiag, :cp_clamp => cpdiag,
-                            :real_arithmetic => isreal_data, :eltype => E)
-    return (Bf = Bf, v = v, w = w, D = D, u = u, σ = σ, Nbar = Nbar, c = c, cp = cp, rows = rows, diag = diag)
+                            :real_arithmetic => isreal_data, :eltype => E, :gram_general => general,
+                            :antiherm_max => antiherm, :antiherm_rel => antiherm / max(Wscale, floatmin()),
+                            :antiherm_sum => antiherm_sum)
+    return (Bf = Bf, v = v, w = w, D = D, u = u, σ = σ, Nbar = Nbar, c = c, cp = cp, rows = rows, diag = diag,
+            vorth = vorth)
 end
 
 # ============================================================================
@@ -971,12 +998,12 @@ Stages 1-2 of Algorithm 2 ([VD] Prop. 4):
 `T` is the real type of Stage 1 and the particle chain (e.g. `BigFloat`).
 """
 function chains(d::DiscreteData; ranktol::Real = 1e-13, tol::Real = 1e-12, T::Type = Float64,
-                stabilize::Bool = false, cs = nothing, maxsteps::Integer = typemax(Int))
-    cs === nothing && (cs = coords(d; ranktol = ranktol, T = T))
+                stabilize::Bool = false, cs = nothing, maxsteps::Integer = typemax(Int), gram::Symbol = :assert)
+    cs === nothing && (cs = coords(d; ranktol = ranktol, T = T, gram = gram))
     N = d.N
     U1 = cs.u * inv(cs.Nbar)
     spb = nothing
-    Π = cs.v
+    Π = cs.vorth
     if stabilize
         spb = single_particle_basis(cs; tol = tol)
         Π = spb.Ω
@@ -1462,9 +1489,9 @@ written. For binned data Prop. 13 does not apply and `Π = 1 - vv†`.
 data is kept as a diagnostic by the callers).
 """
 function vertex_krylov(d::DiscreteData; ranktol::Real = 1e-13, tol::Real = 1e-12, rtol::Real = 1e-12,
-                       stabilize = :auto)
+                       stabilize = :auto, gram::Symbol = :assert)
     stab = stabilize === :auto ? (get(d.meta, :grid_kind, :binned) === :exact) : Bool(stabilize)
-    ch = chains(d; ranktol = ranktol, tol = tol, stabilize = stab)
+    ch = chains(d; ranktol = ranktol, tol = tol, stabilize = stab, gram = gram)
     C, kd = kernels(d, ch; rtol = rtol)
     cp = couplings(d, ch, C)
     return VKResult(d, ch, C, kd, cp)

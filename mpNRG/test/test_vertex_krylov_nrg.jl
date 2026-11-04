@@ -1,7 +1,9 @@
-# vertex_krylov task, phases V2 and V3a/V3b (task sheet Sec. 6): the discrete
+# vertex_krylov task, phases V2 and V3 (task sheet Sec. 6): the discrete
 # Krylov representation of the 3p vertex ([VD] Algorithm 2, in HubbardAtom) on
 # SIAM Wilson chains, from ED of the chain (V2a exact, V2b binned) and from NRG
-# (V3a untruncated, V3b decoupled tail with truncation).
+# (V3a untruncated, V3b decoupled tail with truncation, V3c physical chain with
+# truncation: report only, so only the code path is tested, on the smallest V3c case;
+# the V3c results are produced by mpNRG/scripts/vertex_krylov_v3c.jl and the notebook).
 #
 # Not part of the default runtests.jl: it takes about 90 min and up to ~8 GB of
 # memory (Nch = 2 on the ExactGrid; timings in vertex_krylov_STATUS.md). Run with
@@ -118,5 +120,17 @@ end
         @test any(>(0), tr.disc[2:end - 1])           # truncation is active
         @test out[:diff].W ≤ 1e-12 && out[:diff].wB ≤ 1e-12 && out[:diff].s ≤ 1e-12
         vk_assert_common(out[:checks]; C1 = 1e-10, C56 = 1e-11, C7 = 1e-9, C8 = 1e-8)
+    end
+
+    @testset "V3c physical chain, truncated NRG: code path only (report)" begin
+        GC.gc()
+        d = vk_v3c_data(1e-2, 64, :updn)
+        o = vk_case_v3c(d)
+        c = o[:checks]
+        @test d.meta[:N] == vk_v3c_length(1e-2) && any(>(0), d.meta[:truncation].disc)
+        @test c[:sanity].grid_ok
+        @test all(isfinite, (c[:C1], c[:C2], c[:C3], c[:C4], c[:C5], c[:C6], c[:C7], c[:C8]))
+        @test haskey(o, :big)
+        @info "V3c T=1e-2 Nkeep=64 (↑↓), report: C1 $(c[:C1]) C7 $(c[:C7]) C8 $(c[:C8])"
     end
 end

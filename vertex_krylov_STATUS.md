@@ -17,7 +17,8 @@ the phase log, the deviations from the task sheet, the timings and the verdict.
 | V2, V3a, V3b | Wilson-chain ED (exact and binned), N = 2 block test with field, stabilization, Zacinskis check, untruncated NRG, decoupled-tail truncated NRG; performance and memory fixes | `da7a2c7` |
 | V4 (Step 1) | notebook Sections 0–5 and 7 with outputs, PDF, figures | `48fea2b` |
 | V4 (Step 1) | this file, README row block | `3201add` |
-| amendment | task-sheet amendment A1–A3 after the Step-1 review: stabilized chain as the Stage-2 default for exact data, amended criteria in tests and notebook builder, Step-1 verdict regenerated | see `git log` |
+| amendment | task-sheet amendment A1–A3 after the Step-1 review: stabilized chain as the Stage-2 default for exact data, amended criteria in tests and notebook builder, Step-1 verdict regenerated | `5975e8f` |
+| V3c | physical chain, truncated NRG: `mpNRG/scripts/vertex_krylov_v3c.jl` (data for 16 cases, cached), adapter (`vk_v3c_data`, `vk_case_v3c`, `vk_G0_chain`), Stage-1 option `gram = :general` and anti-Hermitian report, V3c code-path test, notebook Section 6 in the builder | see `git log` |
 
 V0 and V1 were developed together in one file and committed together. V3c
 (physical truncated chain) is Step 2 and was not started.
@@ -101,6 +102,37 @@ notebook builder implement it.
     notebook ran in parallel). It is not in `mpNRG/test/runtests.jl`;
     `VK_FAST=1` restricts it to `Nch = 1` (5 min).
 
+11. **V3c grid.** `LogGrid(emin = 1e-9, emax = 10, ndec = 16)` instead of `emin = 1e-5`:
+    the V3c chains (N = 15, 22) resolve energies far below 1e-5, and with `emin = 1e-5`
+    one 3p PSF at `T = 1e-4` has 5.1e6 (`N_keep = 64`) to 2.7e8 (`N_keep = 512`)
+    clamped contributions. With `emin = 1e-9` the engine still clamps positions between
+    `ztol` = 1e-14 and the first bin (~9e-10); their counts are reported per case
+    (`meta[:nclamped]`, notebook Sec. 6; the engine records counts, not weights).
+12. **V3c chain.** Model, Λ = 4, z = 1 and length `chain_length_for(T; Λ = 4)` (margin 8)
+    as in the mpNRG validation runs: N = 15 (`T = 1e-2`), 22 (`T = 1e-4`); no field.
+13. **Truncated NRG data violate two preconditions of Stage 1** (exact and binned ED
+    data satisfy them to rounding): the Pelz weights `W̃_β` are not Hermitian bin by
+    bin (anti-Hermitian part 0.2–1.4 % of max‖W̃‖; the sum over bins is Hermitian to
+    1e-17), and their Hermitian part is not positive semidefinite (negative mass
+    2e-13 to 9e-4). Stage 1 factors the Hermitian part and drops its negative
+    eigenvalues; both are now reported (`coords` diag `:antiherm_*`,
+    `:rank_dropped_negative`). The factored measure then has `v†v ≠ 1`, and the
+    specified assertion `‖v†v - 1‖ ≤ 1e-12` fails in 12 of the 16 V3c cases. For V3c
+    only, Stage 1 runs with the opt-in `gram = :general` where the assertion would
+    fail: `P = 1 - v(v†v)^{-1}v†`, `σ = (v†v)^{-1}v†w`, identical to the specification
+    when `v†v = 1` (recorded per case in `diag[:gram_general]`). Every other phase
+    keeps the hard assertion. All V3c checks compare with the raw data, so C1 and C8
+    include the cost of what Stage 1 drops. Negative bosonic weights (`T = 1e-4`, down
+    to −1.1e-5) are clamped to 0 and reported, as specified.
+14. **V3c data cache not committed.** The V3c `DiscreteData` are built once by
+    `mpNRG/scripts/vertex_krylov_v3c.jl` (2 h) and cached in
+    `notebooks/data/vertex_krylov_v3c/` (1.9 GB, git-ignored). The notebook loads the
+    cache, builds missing cases with the same function (`v3c_build_all`), and runs
+    the algorithm and all checks itself.
+15. **V3c in the test file.** V3c is report only, so `test_vertex_krylov_nrg.jl`
+    exercises only the code path on the smallest V3c case (`T = 1e-2`,
+    `N_keep = 64`, (↑↓)): it runs, the values are finite, and they are logged.
+
 ## Timings
 
 4 threads (`JULIA_NUM_THREADS=4`), Julia 1.13.3.
@@ -117,6 +149,10 @@ notebook builder implement it.
 | V2a `Nch = 2` per case, field 0.05 (12 163 bins, R = 3 840, L = 3 839) | 32–35 min |
 | V2b / V3a per case (LogGrid, 195 bins) | 1.5–8 s (+ NRG data: 3–15 s, first call 30–40 s incl. compilation) |
 | V3b per case | 4–5 s |
+
+| V3c data (NRG + 34 PSFs per case), `T = 1e-2`, `N_keep` = 64 / 128 / 256 / 512 | 18–49 s / 44 s / 3 min / 12 min |
+| V3c data, `T = 1e-4`, `N_keep` = 64 / 128 / 256 / 512 | 35 s / 83 s / 6.5 min / 25 min |
+| V3c algorithm and checks per case (incl. BigFloat chain), from the cache | 1.2–3.7 min |
 
 In the `Nch = 2` ExactGrid cases the cost is the particle chain (full
 reorthogonalization, ~2 min), its stabilized rerun, the couplings (GEMMs of size
@@ -156,4 +192,4 @@ Open findings (no guaranteed check involved):
   ill-conditioned (report under A3).
 - **F3.** `K^(12) ≡ 0` in the atom's (↑↑) channel (deviation 4).
 
-Step 2 (V3c, V4): pending.
+Step 2: V3c computed (results in the notebook, Sec. 6, after V4); V4 pending.

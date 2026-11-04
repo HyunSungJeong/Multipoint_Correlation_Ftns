@@ -204,9 +204,9 @@ unstabilized one.
 """
 function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing),
                 diagnostic::Bool = get(d.meta, :grid_kind, :binned) === :exact,
-                bigfloat::Bool = false, timings = Dict{Symbol,Float64}())
+                bigfloat::Bool = false, timings = Dict{Symbol,Float64}(), gram::Symbol = :assert)
     exact = get(d.meta, :grid_kind, :binned) === :exact
-    t0 = time(); res = HA.vertex_krylov(d); timings[:algorithm] = time() - t0
+    t0 = time(); res = HA.vertex_krylov(d; gram = gram); timings[:algorithm] = time() - t0
     t0 = time(); c = HA.vk_checks(res; G0 = G0); timings[:checks] = time() - t0
     out = Dict{Symbol,Any}(:res => res, :checks => c, :timings => timings)
     if diagnostic
@@ -227,7 +227,7 @@ function vk_run(d::HA.DiscreteData; G0 = get(d.meta, :G0, nothing),
     if bigfloat
         t0 = time()
         setprecision(BigFloat, 128) do
-            chb = HA.chains(d; T = BigFloat, stabilize = exact)
+            chb = HA.chains(d; T = BigFloat, stabilize = exact, gram = gram)
             L = min(HA.nblocks(chb.Jbar), HA.nblocks(res.ch.Jbar))
             scale = maximum(abs, d.b[[β for β in eachindex(d.b) if !iszero(d.W[β])]])
             dev = [Float64(max(maximum(abs, chb.Jbar.eps[n] - res.ch.Jbar.eps[n]),
@@ -318,4 +318,106 @@ function vk_case_nrg(Nch::Integer, chan::Symbol; field = 0.0, T = 0.05, Nkeep::I
     keep || vk_lighten!(out)
     out[:data] = d
     return out
+end
+
+# ----------------------------------------------------------------------------
+# V3c: physical chain, truncated NRG (task sheet Sec. 6, Step 2)
+# ----------------------------------------------------------------------------
+
+"""
+    vk_v3c_grid()
+
+The V3c grid, `LogGrid(emin = 1e-9, emax = 10.0, ndec = 16)`. Deviation from
+`vk_grid()` (emin = 1e-5), recorded in vertex_krylov_STATUS.md: the chains of V3c
+resolve energies down to `~T Λ^{-4}`; with emin = 1e-5 a single 3p PSF at
+`T = 1e-4` has ~5e6 (N_keep = 64) to ~3e8 (N_keep = 512) clamped contributions.
+"""
+vk_v3c_grid() = LogGrid(emin = 1e-9, emax = 10.0, ndec = 16)
+
+"""Chain length of V3c: `chain_length_for(T; Λ = 4)` (as the mpNRG validation runs, Λ = 4, margin 8)."""
+vk_v3c_length(T) = chain_length_for(T; Λ = 4.0)
+
+"""
+    vk_G0_chain(meta; spins = meta[:spins]) -> z -> Matrix
+
+The impurity Green's function `G_0(z) = [(z - h_σ)^{-1}]_{-1,-1}` of the **same chain
+at `U = 0`**, from the single-particle Hamiltonian of the Wilson chain stored in
+`meta` (on-site `εd - s_σ B/2, ε_0, …, ε_N`; hoppings `t_0, …, t_N` between sites
+`n-1` and `n`, the convention of `hamiltonian_expr`). Exact for the discretized
+chain; used for the Dyson check (C3) of the long V3c chains, where ED is impossible.
+"""
+function vk_G0_chain(meta; spins = meta[:spins])
+    εd = meta[:εd]; Bf = meta[:field]
+    hs = map(spins) do σ
+        c = σ === :up ? 1 : 2
+        e = meta[:chain_eps][c]; t = meta[:chain_t][c]
+        L = length(e)
+        h = zeros(L + 1, L + 1)
+        h[1, 1] = εd - (σ === :up ? 1 : -1) * Bf / 2
+        for n in 1:L
+            h[n + 1, n + 1] = e[n]
+            h[n, n + 1] = h[n + 1, n] = t[n]
+        end
+        eigen(Symmetric(h))
+    end
+    return z -> Matrix(Diagonal(ComplexF64[sum(abs2.(F.vectors[1, :]) ./ (z .- F.values)) for F in hs]))
+end
+
+"""
+    vk_v3c_data(T, Nkeep, chan; grid = vk_v3c_grid()) -> DiscreteData
+
+V3c data: `run_nrg(vk_model(), NRGParams(N = vk_v3c_length(T), Nkeep))` (Λ = 4, z = 1),
+`fdm(run; T)`, and [`discrete_data_nrg`](@ref) on `grid`. Records the truncation
+(kept / discarded per shell), the clamping count and the timings in `meta`.
+"""
+function vk_v3c_data(T::Real, Nkeep::Integer, chan::Symbol; grid = vk_v3c_grid())
+    m = vk_model()
+    N = vk_v3c_length(T)
+    t0 = time()
+    nrun = run_nrg(m, NRGParams(N = N, Nkeep = Nkeep))
+    f = fdm(nrun; T = T)
+    tnrg = time() - t0
+    t0 = time()
+    d = discrete_data_nrg(nrun, f, grid; m = m, σ = :up, channel = chan)
+    d.meta[:time_nrg] = tnrg
+    d.meta[:time_data] = time() - t0
+    d.meta[:truncation] = (kept = [totalkept(shell(nrun, n)) for n in 0:N], disc = [totaldisc(shell(nrun, n)) for n in 0:N])
+    return d
+end
+
+"""
+    vk_case_v3c(d; bigfloat = true) -> Dict
+
+Run Algorithm 2 and all checks on V3c data `d` (report only), with the U = 0 chain
+propagator of [`vk_G0_chain`](@ref) for C3 and the particle chain also in BigFloat.
+Truncated NRG weights `W̃_β` need not be Hermitian bin by bin (Stage 1 uses the
+Hermitian part; the anti-Hermitian part is reported) nor positive semidefinite; Stage 1 drops their
+negative eigenvalues (reported: `coords` diag `:rank_dropped_negative`), so
+`v†v ≠ 1` and Stage 1 runs with `gram = :general` where the specified assertion
+`‖v†v - 1‖ ≤ 1e-12` would fail (reported: `:gram_general`, `:norm_err`; deviation in
+vertex_krylov_STATUS.md). `out[:psd]` summarizes the non-PSD part of the data.
+"""
+function vk_case_v3c(d::HA.DiscreteData; bigfloat::Bool = true)
+    o = vk_run(d; G0 = vk_G0_chain(d.meta), bigfloat = bigfloat, diagnostic = false, gram = :general)
+    neg = 0.0; worst = 0.0; nneg = 0
+    for W in d.W
+        iszero(W) && continue
+        λ = eigvals(Hermitian((W + W') / 2))
+        m = minimum(λ)
+        if m < -1e-13 * maximum(abs, λ)
+            nneg += 1; neg += -sum(min.(λ, 0.0)); worst = max(worst, -m / maximum(abs, λ))
+        end
+    end
+    cd = o[:res].ch.cs.diag
+    o[:psd] = (neg_mass = neg, worst_rel = worst, nbins_neg = nneg, norm_err = cd[:norm_err],
+               gram_general = cd[:gram_general], dropped_negative = cd[:rank_dropped_negative],
+               antiherm_rel = cd[:antiherm_rel], antiherm_sum = cd[:antiherm_sum],
+               wB_neg = (cd[:c_clamp].nclamped, cd[:c_clamp].clamped_min), wBd_neg = (cd[:cp_clamp].nclamped, cd[:cp_clamp].clamped_min))
+    return o
+end
+
+"""    vk_strip(d) — `d` without the closure in `meta[:G0]` (for JLD2 storage)."""
+function vk_strip(d::HA.DiscreteData)
+    meta = copy(d.meta); delete!(meta, :G0)
+    return HA.DiscreteData(d.N, d.b, d.bar, d.W, d.Wplain, d.Whole, d.wB, d.wBd, d.s1, d.s2, d.s3, d.s4, d.s5, d.s6, d.T, meta)
 end
