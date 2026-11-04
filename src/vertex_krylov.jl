@@ -1679,10 +1679,15 @@ function zacinskis_check(res::VKResult; zs = vk_testpoints(res.data), tol::Real 
     Lz = length(plz.eps); L = nblocks(ch.Jbar)
     Lc = min(Lz, L)
     scale = maximum(abs, D)
+    # per-block deviation profile of the Jacobi blocks (relative to max|D|)
+    dev = [max(_vk_maxabs(plz.eps[n] - ComplexF64.(ch.Jbar.eps[n])),
+               n < Lc ? _vk_maxabs(plz.t[n] - ComplexF64.(ch.Jbar.lower[n])) : 0.0) / scale for n in 1:Lc]
     eps_err = maximum(n -> _vk_maxabs(plz.eps[n] - ComplexF64.(ch.Jbar.eps[n])), 1:Lc; init = 0.0) / scale
     t_err = Lc > 1 ? maximum(n -> _vk_maxabs(plz.t[n] - ComplexF64.(ch.Jbar.lower[n])), 1:(Lc - 1); init = 0.0) / scale : 0.0
+    bad = findfirst(>(1e-8), dev)
     return (S_err = S_err, U1_err = U1_err, spec_err = spec_err, weight_err = wt_err,
             sigma_err = sig_err / max(sref, floatmin()), eps_err = eps_err, t_err = t_err,
+            block_dev = dev, n_agree = bad === nothing ? Lc : bad - 1,
             L_zac = Lz, L_chain = L, dim_ranP = R - N)
 end
 
@@ -1690,15 +1695,19 @@ _vk_eigen_or_empty(A::Hermitian) = size(A, 1) == 0 ?
     (values = Float64[], vectors = zeros(ComplexF64, 0, 0)) : eigen(A)
 
 """
-    check_C2(res; zs) -> Float64
+    check_C2(res; zs) -> (Float64, NamedTuple)
 
-(C2) the largest of the relative deviations of [`zacinskis_check`](@ref)
-(self-energy, Jacobi blocks, `S - N̄²`, start block, spectra and weights of `Ω′`).
-Chain lengths that differ are reported by `zacinskis_check`.
+(C2) implementation cross-check: the largest of the relative deviations of
+[`zacinskis_check`](@ref) between the two routes for the same matrix `PDP` on
+`ran P` — `S - N̄²`, start block, spectra and first-block weights of `Ω′`, and the
+self-energy `Σ^S`. The Jacobi blocks of the two Lanczos runs are reported
+separately (`block_dev`, `n_agree`, `L_zac`, `L_chain`): Jacobi coefficients of a
+discrete measure with weights spanning many decades are ill-conditioned, so two
+Float64 runs from different bases agree only on the leading blocks.
 """
 function check_C2(res::VKResult; zs = vk_testpoints(res.data))
     z = zacinskis_check(res; zs = zs)
-    return max(z.S_err, z.U1_err, z.spec_err, z.weight_err, z.sigma_err, z.eps_err, z.t_err), z
+    return max(z.S_err, z.U1_err, z.spec_err, z.weight_err, z.sigma_err), z
 end
 
 """
