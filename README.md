@@ -160,25 +160,29 @@ assertions); executed checks: `TNOps/notebooks/tnops_checks.ipynb`.
 | `mpNRG/docs/TNOPS_REFACTOR.md` | 4.3 | `nrg/tensors.jl` contractions vs the pre-refactor implementation (frozen fixtures) and vs dense Jordan–Wigner | ≤ 1e-13 |
 | `mpNRG/docs/TNOPS_REFACTOR.md` | 8 | regression baseline: 4 SIAM runs, all mpNRG quantities vs the pre-refactor code; kept counts | ≤ 3.7e-13 rel.; identical |
 
-### vertex_krylov (Step 1)
+### vertex_krylov
 
 [VD] Algorithm 2 (`src/vertex_krylov.jl`): from discrete 2p and 3p PSF weights on one symmetric grid, the Jacobi
 matrices `J̄`, `J̄_d = -J̄ᵀ`, `𝕁_B`, `𝕁_{B†}`, the couplings (VD27) and `Σᴸ`, `Σᴿ`, assembled into the Matsubara
 regular part `K̃⁽¹²⁾` of Lihm's 3p estimator and compared with the estimator evaluated directly from the same PSFs
 (`regular_sum`). Data from HubbardAtom ED, mpNRG ED of Wilson chains (ExactGrid and LogGrid) and mpNRG NRG
-(`mpNRG/test/vertex_krylov_adapter.jl`). Record: [`vertex_krylov_STATUS.md`](vertex_krylov_STATUS.md); all results:
-`notebooks/vertex_krylov.ipynb` (314-row test matrix). Tests: `test/test_vertex_krylov.jl` (414 assertions, in
-`runtests.jl`), `mpNRG/test/test_vertex_krylov_nrg.jl` (841 assertions + 8 `@test_broken` for F1, 90 min, not in the default suite). Step 2 (V3c) not started.
+(`mpNRG/test/vertex_krylov_adapter.jl`, `mpNRG/scripts/vertex_krylov_v3c.jl`). Criteria: task sheet as amended after
+the Step-1 review (A1–A3: for exact data the stabilized particle chain of [VD] Prop. 13 is the Stage-2 default and its
+C4 is guaranteed; C2 invariants guaranteed at 1e-10). Record: [`vertex_krylov_STATUS.md`](vertex_krylov_STATUS.md);
+all results: `notebooks/vertex_krylov.ipynb` (532-row test matrix: Step 1 252 pass, 0 FAIL, 104 report; V3c 176
+report). Tests: `test/test_vertex_krylov.jl` (414 assertions, in `runtests.jl`),
+`mpNRG/test/test_vertex_krylov_nrg.jl` (872 assertions, 77 min, not in the default suite).
 
 | Sheet | Item | Check | Accuracy |
 |:--|:--|:--|:--|
 | `vertex_krylov_task.md` | V0 | PSF convention, ζ signs, odd bin maps, (I3) map, `regular_sum` frequency convention vs [3p] Liouvillian form; data sanity (sum rules, 3p totals, PSD, hole symmetry) | ≤ 2e-15 |
 | `vertex_krylov_task.md` | V1 | atom `U = 1`, `εd = -0.3`, `T = 0.1, 0.5`: closed-form chain; C1–C8; `N = 2` block test (also rotated complex orbitals) | ≤ 4e-14 (C8 ≤ 1e-15) |
-| `vertex_krylov_task.md` | V2a | Wilson-chain ED, ExactGrid, 64/256 states, with/without field: C1, C3, C5–C8 | ≤ 3e-13 |
+| `vertex_krylov_task.md` | V2a | Wilson-chain ED, ExactGrid, 64/256 states, with/without field: C1, C3, C5–C8; C2 invariants | ≤ 3e-13; ≤ 1.3e-12 |
 | `vertex_krylov_task.md` | V2a | C4 bath leakage of the default (stabilized, [VD] Prop. 13) chain / of the unstabilized diagnostic chain (report, amendment A1, finding F1) | ≤ 1.3e-14 / 0.20–0.85 |
-| `vertex_krylov_task.md` | V2b | same ED binned on the LogGrid: C1, C5–C8 (C3, C4 report) | ≤ 2e-13 |
-| `vertex_krylov_task.md` | V3a | untruncated NRG vs binned ED: data; C1, C5–C8 | ≤ 1e-14; ≤ 2e-13 |
-| `vertex_krylov_task.md` | V3b | decoupled tail, truncated NRG (`N_keep = 40`) vs ED: data; C1, C5–C8 | ≤ 4e-15; ≤ 4e-14 |
+| `vertex_krylov_task.md` | V2b | same ED binned on the LogGrid: C1, C2, C5–C8 (C3, C4 report) | ≤ 2e-13 |
+| `vertex_krylov_task.md` | V3a | untruncated NRG vs binned ED: data; C1, C2, C5–C8 | ≤ 1e-14; ≤ 2e-13 |
+| `vertex_krylov_task.md` | V3b | decoupled tail, truncated NRG (`N_keep = 40`) vs ED: data; C1, C2, C5–C8 | ≤ 4e-15; ≤ 8e-14 |
+| `vertex_krylov_task.md` | V3c | physical chain, truncated NRG, `N_keep` = 64…512, `T = 1e-2, 1e-4` (report): C7 data inconsistency; C8 vertex vs direct estimator; `K̃` change 256 → 512 | 2e-8–2e-2; 9e-5–0.58 (≤ 7.3e-4 for `N_keep ≥ 256`); ≤ 7e-3 |
 
 ## Findings
 

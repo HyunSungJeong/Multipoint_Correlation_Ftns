@@ -831,7 +831,29 @@ with operator-level `regular_sum`, `test/test_vertex_krylov.jl`). C8 as a ratio 
 scale of the permutation terms (deviation 4 in `vertex_krylov_STATUS.md`); the per-permutation agreement holds as
 everywhere.
 
-**F4 — V3c (physical chain, truncated NRG): see the text after the evidence cell.**
+**F4 — V3c: truncated NRG data are not exact data of a single generator, and the vertex pays for it (report).**
+Evidence in Sec. 6 and in the cell below.
+
+* *Stage-1 preconditions fail.* The Pelz weights $\widetilde{\mathbf W}_\beta$ of truncated NRG are not Hermitian
+  bin by bin, and their Hermitian part is not positive semidefinite. The specified algorithm therefore stops at its
+  Stage-1 assertion $\|v^\dagger v-1\|\le10^{-12}$ whenever the dropped negative mass exceeds that level; Sec. 6
+  runs those cases with the reported variant `gram = :general`. The anti-Hermitian part shrinks with $N_{\rm keep}$
+  but does not vanish at $N_{\rm keep}=512$; the negative part reaches rounding level at $T=10^{-2}$ for
+  $N_{\rm keep}\ge256$ (where the specified Stage 1 runs) but not at $T=10^{-4}$.
+* *Checks that hold for any Hermitian data still hold:* the C2 invariants (Zacinskis route) and C5 stay at rounding
+  level. C1 does not, because $\widetilde G$ is built from the raw weights while the chain sees only their
+  Hermitian PSD part; C1 measures exactly what Stage 1 drops.
+* *C7 vs C8.* The factorization residual C7 and the assembly error C8 both decrease with $N_{\rm keep}$, but C8 is not
+  controlled by C7 alone: at $T=10^{-2}$ C7 drops to the $10^{-8}$ level for $N_{\rm keep}\ge256$ while C8 levels off
+  well above it. This is consistent with C8 being set at large $N_{\rm keep}$ by the parts of the data that Stage 1
+  drops (anti-Hermitian, non-PSD) rather than by the kernel factorization; this attribution is not isolated here.
+* *Convergence in $N_{\rm keep}$.* $\tilde K$ and $K^{\rm direct}$ change little between $N_{\rm keep}=256$ and 512
+  compared with the change from 64 (convergence table in Sec. 6).
+* *Report-only checks.* C3 (Dyson) and C4 (bath leakage) are of the same size as for the binned ED data of V2b,
+  i.e. set by the binning; C6 is at rounding level at $T=10^{-2}$ and limited at $T=10^{-4}$ by the clamped negative
+  bosonic weights.
+* *Precision.* The BigFloat particle chain has the same length as the Float64 one, and the Jacobi blocks agree on all
+  levels except at $N_{\rm keep}=64$, where the data are the least consistent.
 """)
 
 code(r"""
